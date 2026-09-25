@@ -1,0 +1,108 @@
+{
+  "community": {
+    "base_url": "https://<community-host>/community",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "user_client_id": "<public-client-id>",
+    "user_client_secret": "",
+    "admin_client_id": "<admin-client-id>",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "target": {
+    "competition_id": "",
+    "title": "",
+    "input_file": "../creation/challenge_created.json",
+    "require_input_file": false
+  },
+  "lookup": {
+    "status": "PUBLISHED",
+    "page_size": 100,
+    "max_pages": 20
+  },
+  "consumers": {
+    "count": 1,
+    "accounts": [
+      {
+        "username": "<consumer-username>",
+        "password": "${CONSUMER_PASS:-}",
+        "token": ""
+      }
+    ],
+    "auto_create": {
+      "enabled": true,
+      "password": "Consumer@Pass1",
+      "first_name": "Consumer",
+      "last_name": "Submitter",
+      "prefix": "e2e-dev-submitter",
+      "email_domain": "example.invalid",
+      "username_template": "{prefix}-{timestamp}-{index}-{random}@{domain}",
+      "timestamp_format": "%Y%m%d%H%M%S",
+      "random_hex_bytes": 2,
+      "enabled_account": true,
+      "email_verified": true,
+      "temporary_password": false,
+      "attributes": {},
+      "settle_seconds": 0
+    }
+  },
+  "join": {
+    "enabled": true,
+    "already_joined_ok": true,
+    "expect_http_status": [
+      200,
+      201
+    ]
+  },
+  "submission": {
+    "title_template": "Solution {index} by {username}",
+    "description_template": "Automated submission {index} for '{challenge}' from dx-automation-script; safe to disqualify.",
+    "solution_zip_file": "",
+    "document_file": "",
+    "generate": {
+      "zip_name_template": "solution-{index}.zip",
+      "document_name_template": "writeup-{index}.pdf",
+      "csv_rows": 20,
+      "directory": ""
+    },
+    "content_type": "application/octet-stream",
+    "upload_timeout_seconds": 120,
+    "on_existing": "fail",
+    "expect_http_status": [
+      200,
+      201
+    ],
+    "verify_after": true,
+    "pause_seconds": 0
+  },
+  "endpoints": {
+    "kc_token": "/realms/{realm}/protocol/openid-connect/token",
+    "kc_users": "/admin/realms/{realm}/users",
+    "kc_user": "/admin/realms/{realm}/users/{user_id}",
+    "public_list": "/challenge/users/challenges",
+    "join": "/challenge/users/challenges/{competition_id}/join",
+    "attachment": "/challenge/attachment",
+    "submit": "/challenge/{competition_id}/submission",
+    "my_submissions": "/challenge/users/challenges/{competition_id}/submissions"
+  },
+  "time_format": {
+    "timezone": "Asia/Kolkata"
+  },
+  "output": {
+    "enabled": true,
+    "file": "submissions_created.json",
+    "include_password": true
+  },
+  "logging": {
+    "level": "INFO",
+    "print_requests": true,
+    "print_responses": true,
+    "response_preview_chars": 2000,
+    "mask_secrets": false
+  }
+}

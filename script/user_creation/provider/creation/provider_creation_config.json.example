@@ -1,0 +1,162 @@
+{
+  "control_plane": {
+    "base_url": "https://<controlplane-host>",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "admin_client_id": "<admin-client-id>",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "user_client_id": "<public-client-id>",
+    "user_client_secret": "",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "user": {
+    "username": "",
+    "email": "",
+    "password": "Provider@Pass1",
+    "first_name": "Provider",
+    "last_name": "User",
+    "prefix": "user-provider",
+    "email_domain": "example.invalid",
+    "username_template": "{prefix}-{timestamp}-{random}@{domain}",
+    "timestamp_format": "%Y%m%d%H%M%S",
+    "random_hex_bytes": 2,
+    "enabled": true,
+    "email_verified": true,
+    "temporary_password": false,
+    "attributes": {},
+    "realm_roles": [],
+    "reuse_existing": false,
+    "required_actions": []
+  },
+  "organisation": {
+    "id": "<organisation-uuid>",
+    "name": "",
+    "lookup_by_name": true
+  },
+  "org_admin": {
+    "username": "<org-admin-username>",
+    "password": "${ORG_ADMIN_PASS:-}",
+    "token": ""
+  },
+  "cos_admin": {
+    "username": "<cos-admin-username-for-org_create-mode>",
+    "password": "${COS_ADMIN_PASS:-}",
+    "token": ""
+  },
+  "provider": {
+    "mode": "join_and_request",
+    "role_name": "provider",
+    "refresh_token_after_join": true,
+    "join": {
+      "job_title": "Engineer",
+      "emp_id": "EMP001",
+      "official_email": "",
+      "approve": true,
+      "approve_status": "granted",
+      "list_status": "pending",
+      "list_page_size": 100,
+      "list_max_pages": 20,
+      "settle_seconds": 2
+    },
+    "role_request": {
+      "lookup": "self",
+      "approve": true,
+      "approve_status": "granted",
+      "settle_seconds": 2
+    },
+    "org_create": {
+      "name": "",
+      "name_prefix": "prov-org",
+      "name_max_length": 24,
+      "approve": true,
+      "approve_status": "granted",
+      "list_page_size": 100,
+      "list_max_pages": 20,
+      "payload": {
+        "entity_type": "private",
+        "org_sector": "technology",
+        "website_link": "https://example.invalid",
+        "address": "Automation script, generated organisation",
+        "certificate_path": "/automation/cert.pdf",
+        "pancard_path": "/automation/pan.pdf",
+        "emp_id": "EMP001",
+        "job_title": "Automation",
+        "manager_email": "",
+        "organisation_documents": "/automation/org.pdf"
+      }
+    }
+  },
+  "create": {
+    "fetch_token": true,
+    "touch_control_plane": true,
+    "expect_roles": [
+      "provider"
+    ],
+    "role_timeout_seconds": 60,
+    "role_poll_seconds": 2,
+    "settle_seconds": 0,
+    "verify_email": "none",
+    "email_actions": [
+      "VERIFY_EMAIL"
+    ],
+    "email_link_client_id": "",
+    "email_link_redirect_uri": "",
+    "email_link_lifespan_seconds": 0
+  },
+  "compute": {
+    "enabled": false,
+    "additional_info": {},
+    "kyc": {
+      "set_verified": true,
+      "attribute": "kyc_verified",
+      "value": "true",
+      "refresh_token": true
+    },
+    "approve": true,
+    "approve_status": "granted",
+    "lookup": "self",
+    "list_page_size": 100,
+    "list_max_pages": 20,
+    "settle_seconds": 2,
+    "expect_role": "compute"
+  },
+  "endpoints": {
+    "kc_token": "/realms/{realm}/protocol/openid-connect/token",
+    "kc_users": "/admin/realms/{realm}/users",
+    "kc_user": "/admin/realms/{realm}/users/{user_id}",
+    "kc_realm_role": "/admin/realms/{realm}/roles/{role}",
+    "kc_role_mappings": "/admin/realms/{realm}/users/{user_id}/role-mappings/realm",
+    "cp_user_info": "/iudx/v2/auth/user",
+    "cp_compute_requests": "/iudx/v2/auth/compute/requests",
+    "cp_compute_request": "/iudx/v2/auth/compute/requests/{req_id}",
+    "cp_own_compute_requests": "/iudx/v2/auth/user/compute/requests",
+    "cp_organisations": "/iudx/v2/auth/organisations",
+    "cp_join_requests": "/iudx/v2/auth/organisations/{org_id}/join_requests",
+    "cp_join_request": "/iudx/v2/auth/organisations/{org_id}/join_requests/{req_id}",
+    "cp_provider_role_requests": "/iudx/v2/auth/organization/user/provider_role/requests",
+    "cp_provider_role_request": "/iudx/v2/auth/organization/user/provider_role/requests/{req_id}",
+    "cp_own_provider_requests": "/iudx/v2/auth/organization/user/provider_requests",
+    "cp_provider_grant": "/iudx/v2/auth/organization/user/provider",
+    "cp_org_create_requests": "/iudx/v2/auth/organisations/requests",
+    "cp_org_create_approve": "/iudx/v2/auth/organisations/requests/approve",
+    "kc_send_verify_email": "/admin/realms/{realm}/users/{user_id}/send-verify-email",
+    "kc_execute_actions_email": "/admin/realms/{realm}/users/{user_id}/execute-actions-email"
+  },
+  "output": {
+    "enabled": true,
+    "file": "provider_created.json",
+    "include_password": true
+  },
+  "logging": {
+    "level": "INFO",
+    "print_requests": true,
+    "print_responses": true,
+    "response_preview_chars": 2000,
+    "mask_secrets": false
+  }
+}

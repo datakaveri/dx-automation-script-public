@@ -1,0 +1,351 @@
+{
+  "control_plane": {
+    "base_url": "https://controlplane.example.com",
+    "timeout_seconds": 30
+  },
+  "acl": {
+    "base_url": "https://acl.example.com",
+    "apd_url": null
+  },
+  "keycloak": {
+    "url": "https://keycloak.example.com/auth",
+    "realm": "iudx",
+    "admin_client_id": "aaa-admin",
+    "admin_client_secret": "${E2E_KC_ADMIN_SECRET}",
+    "user_client_id": "postman-client",
+    "user_client_secret": null,
+    "roles": {
+      "cos_admin": "cos_admin",
+      "org_admin": "org_admin",
+      "provider": "provider"
+    }
+  },
+  "cos_admin": {
+    "username": "${E2E_COS_ADMIN_USER:-}",
+    "password": "${E2E_COS_ADMIN_PASS:-}"
+  },
+  "resource_servers": {
+    "ngsild": {
+      "name": "NGSI-LD",
+      "type": "ngsi-ld",
+      "scheme": "https",
+      "url": "rs.example.com",
+      "verify_path": "/ngsi-ld/v1/entities",
+      "access_types": [
+        "api"
+      ],
+      "query_types": [
+        "ATTR"
+      ],
+      "dataset_type": "DATASET",
+      "expect_denied": [
+        401,
+        403
+      ],
+      "enabled": true
+    },
+    "gateway": {
+      "name": "GATEWAY",
+      "type": "gateway",
+      "scheme": "https",
+      "url": "gateway.example.com",
+      "verify_path": "/ngsi-ld/v1/entities",
+      "access_types": [
+        "api"
+      ],
+      "query_types": [
+        "ATTR"
+      ],
+      "dataset_type": "DATASET",
+      "expect_denied": [
+        401,
+        403
+      ],
+      "enabled": true
+    },
+    "ogc": {
+      "name": "OGC",
+      "type": "ogc",
+      "scheme": "https",
+      "url": "ogc.example.com",
+      "verify_path": "/collections/{item_id}",
+      "access_types": [
+        "api"
+      ],
+      "raster": false,
+      "stac_verify_path": "/stac/collections/{item_id}/items",
+      "dataset_type": "DATASET",
+      "expect_denied": [],
+      "stac_expect_denied": [],
+      "enabled": true
+    },
+    "file": {
+      "name": "FILE",
+      "type": "file",
+      "scheme": "https",
+      "url": "file.example.com",
+      "verify_path": "/v1/databanks/{item_id}/download",
+      "access_types": [
+        "file"
+      ],
+      "query_types": [],
+      "dataset_type": "DATASET",
+      "expect_denied": [
+        401,
+        403
+      ],
+      "enabled": true
+    }
+  },
+  "databroker": {
+    "enabled": false,
+    "host": "databroker.example.com",
+    "management_port": 15672,
+    "username": "${E2E_RMQ_USER:-admin}",
+    "password": "${E2E_RMQ_PASS:-}",
+    "vhost": "IUDX-V2-INTERNAL",
+    "auditing_exchange": "auditing",
+    "use_tls": true
+  },
+  "ngsild_publish": {
+    "enabled": true,
+    "script": "../script/NGSILD_Automation_Script/ngsild_publish_v1.py",
+    "host": null,
+    "port": 24567,
+    "username": null,
+    "password": null,
+    "vhost": "IUDX-V2",
+    "cert_path": "../script/NGSILD_Automation_Script/rabbitmq-ca.crt",
+    "check_hostname": false,
+    "queue_name": "database",
+    "data_file": null,
+    "count": null,
+    "verbose": false,
+    "settle_seconds": 2,
+    "retries": 0,
+    "retry_delay_seconds": 5
+  },
+  "gateway_adaptor": {
+    "enabled": true,
+    "script": "../script/GATEWAY_Automation_Script/gateway.py",
+    "host": null,
+    "port": 24567,
+    "username": null,
+    "password": null,
+    "vhost": "IUDX-V2-INTERNAL",
+    "cert_path": "../script/GATEWAY_Automation_Script/rabbitmq-ca.crt",
+    "check_hostname": false,
+    "queue_name": null,
+    "api_url": "https://dummyjson.com/users",
+    "results_key": "users",
+    "startup_seconds": 2,
+    "verbose": false
+  },
+  "gateway_delete": {
+    "enabled": true,
+    "script": "../script/GATEWAY_Automation_Script/delete_rmq.py",
+    "host": null,
+    "port": null,
+    "username": null,
+    "password": null,
+    "vhost": null,
+    "cert_path": null,
+    "check_hostname": null,
+    "mgmt_url": null,
+    "mgmt_verify": null,
+    "queue_name": null,
+    "delete_user": null,
+    "verbose": false
+  },
+  "ogc_vector": {
+    "enabled": true,
+    "script": "../script/OGC_Automation_Script/Vector_Automation/Creation/vector_creation.py",
+    "base_url": null,
+    "gpkg_path": "/path/to/sample.gpkg",
+    "bucket_name": "${E2E_OGC_BUCKET:-}",
+    "region": "${E2E_OGC_REGION:-}",
+    "batch_size": 5,
+    "label": "E2E vector collection",
+    "description": "Automated end-to-end test asset. Safe to delete.",
+    "ensure_provider_role": true,
+    "provider_username": "${E2E_OGC_PROVIDER_USER:-}",
+    "provider_password": "${E2E_OGC_PROVIDER_PASS:-}",
+    "token_user": "requester",
+    "token_kind": "identity",
+    "settle_seconds": 15,
+    "retries": 0,
+    "retry_delay_seconds": 15,
+    "verbose": false
+  },
+  "ogc_postgres": {
+    "host": null,
+    "port": null,
+    "database": "ogc_rs_v2",
+    "schema": null,
+    "user": null,
+    "password": "${E2E_OGC_DB_PASS:-}"
+  },
+  "ogc_raster": {
+    "enabled": true,
+    "ingest_script": "../script/OGC_Automation_Script/Raster_Automation/Creation/stac_injestion.py",
+    "upload_script": "../script/OGC_Automation_Script/Raster_Automation/S3Upload/S3.py",
+    "tif_dir": "../script/OGC_Automation_Script/Raster_Automation/5ddcbdd8-3040-48f3-9a0c-5916c0c0d3be",
+    "base_url": null,
+    "title": "E2E raster collection",
+    "description": "Automated end-to-end test asset. Safe to delete.",
+    "bucket": null,
+    "region": null,
+    "endpoint": null,
+    "aws_access_key_id": "${E2E_OGC_S3_KEY:-}",
+    "aws_secret_access_key": "${E2E_OGC_S3_SECRET:-}",
+    "timeout_seconds": 60,
+    "ingest_settle_seconds": 5,
+    "upload_settle_seconds": 15,
+    "token_user": "requester",
+    "token_kind": "identity",
+    "verbose": false
+  },
+  "ogc_raster_delete": {
+    "enabled": true,
+    "script": "../script/OGC_Automation_Script/Raster_Automation/Deletion/stac_deletion.py",
+    "batch_size": 100,
+    "delete_delay": 0.2,
+    "request_timeout": 60,
+    "verbose": false
+  },
+  "ogc_s3_cleanup": {
+    "enabled": true,
+    "script": "../script/OGC_Automation_Script/Extra_To_Clean_S3/s3_deleteion.py",
+    "bucket": null,
+    "region": null,
+    "aws_access_key_id": null,
+    "aws_secret_access_key": null,
+    "verbose": false
+  },
+  "ogc_vector_delete": {
+    "enabled": true,
+    "keep_on_failure": true,
+    "script": "../script/OGC_Automation_Script/Vector_Automation/Deletion/vector_deletion.py",
+    "verbose": false
+  },
+  "file_upload": {
+    "enabled": true,
+    "script": "../script/FILE_Automation_Script/creation/file_creation.py",
+    "base_url": null,
+    "api_version": "v1",
+    "file_path": "../script/FILE_Automation_Script/creation/postman-upload.csv",
+    "key": null,
+    "content_type": null,
+    "verify_tls": true,
+    "request_timeout_seconds": 120,
+    "max_retries": 3,
+    "part_size_mb": 100,
+    "processing_enabled": true,
+    "processing_type": "all",
+    "processing_uploaded_only": false,
+    "processing_wait": true,
+    "processing_poll_seconds": 5,
+    "processing_timeout_seconds": 600,
+    "token_user": "requester",
+    "token_kind": "identity",
+    "settle_seconds": 5,
+    "verbose": false
+  },
+  "file_delete": {
+    "enabled": true,
+    "script": "../script/FILE_Automation_Script/deletion/file_deletion.py",
+    "verbose": false
+  },
+  "ngsild_delete": {
+    "enabled": false,
+    "script": "../script/NGSILD_Automation_Script/ngsild_delete_v1.py",
+    "kibana_host": "https://kibana.example.com",
+    "kibana_username": "${E2E_KIBANA_USER:-}",
+    "kibana_password": "${E2E_KIBANA_PASS:-}",
+    "mgmt_url": "https://databroker.example.com",
+    "username": null,
+    "password": null,
+    "vhost": null,
+    "index_prefix": "iudx-v2__",
+    "mgmt_verify": "true",
+    "delete_user": null,
+    "dry_run": false,
+    "verbose": false
+  },
+  "sandbox": {
+    "enabled": false,
+    "scheme": "https",
+    "url": "https://sandbox.example.com/api",
+    "health_path": "/v1/health",
+    "expect_status": "ok",
+    "verify_path": "/v1/notebook/list",
+    "expect_denied": [
+      401,
+      403
+    ],
+    "bearer_token": "${E2E_SANDBOX_TOKEN:-}",
+    "token_user": null,
+    "token_client_id": null,
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "community": {
+    "enabled": false,
+    "scheme": "https",
+    "url": "https://community.example.com",
+    "health_path": "/healthz",
+    "expect_dependencies": [
+      "PostgreSQL DB",
+      "AWS S3"
+    ],
+    "services": {
+      "discussion": {
+        "enabled": true,
+        "public_path": "/discussion/tags/popular",
+        "verify_path": "/discussion/recent/bookmarked",
+        "expect_denied": [
+          401,
+          403
+        ]
+      },
+      "challenge": {
+        "enabled": true,
+        "public_path": "/challenge/all",
+        "verify_path": "/challenge/participated",
+        "expect_denied": [
+          401,
+          403
+        ]
+      }
+    },
+    "bearer_token": "${E2E_COMMUNITY_TOKEN:-}",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "postgres": {
+    "enabled": false,
+    "host": "postgres.example.com",
+    "port": 5432,
+    "database": "iudx_v2_auth",
+    "schema": "aaa",
+    "user": "postgres",
+    "password": "${E2E_PG_PASS:-}",
+    "sslmode": "require"
+  },
+  "run": {
+    "prefix": "e2e",
+    "user_password": "E2eTest@Pass1",
+    "email_domain": "example.invalid",
+    "cleanup": true,
+    "verify_cleanup": true,
+    "sweep_database": false,
+    "sweep_older_than_hours": 0,
+    "delete_audit_rows": false,
+    "delete_all_cos_admin_data": true,
+    "audit_timeout_seconds": 60,
+    "verify_resource_servers": true,
+    "response_preview_chars": 800,
+    "report_dir": null,
+    "report_file": null
+  }
+}

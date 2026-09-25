@@ -1,0 +1,5 @@
+requests>=2.31.0,<3.0.0
+# Only the org_admin deletion script needs this, and only when its postgres
+# cleanup is enabled — the organisation an org admin leaves behind cannot be
+# removed through the API.
+psycopg2-binary>=2.9.0,<3.0.0

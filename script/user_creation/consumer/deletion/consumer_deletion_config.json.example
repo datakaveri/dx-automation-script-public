@@ -1,0 +1,47 @@
+{
+  "control_plane": {
+    "base_url": "https://<controlplane-host>",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "admin_client_id": "<admin-client-id>",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "user_client_id": "<public-client-id>",
+    "user_client_secret": "",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "target": {
+    "username": "",
+    "user_id": "",
+    "password": "",
+    "input_file": "../creation/consumer_created.json",
+    "require_input_file": false,
+    "remove_input_file": true
+  },
+  "delete": {
+    "mode": "auto",
+    "pause_seconds": 0,
+    "verify": true,
+    "verify_timeout_seconds": 30,
+    "verify_poll_seconds": 2
+  },
+  "endpoints": {
+    "kc_token": "/realms/{realm}/protocol/openid-connect/token",
+    "kc_users": "/admin/realms/{realm}/users",
+    "kc_user": "/admin/realms/{realm}/users/{user_id}",
+    "kc_realm_role": "/admin/realms/{realm}/roles/{role}",
+    "kc_role_mappings": "/admin/realms/{realm}/users/{user_id}/role-mappings/realm",
+    "cp_user_delete": "/iudx/v2/auth/user/delete"
+  },
+  "logging": {
+    "level": "INFO",
+    "print_requests": true,
+    "print_responses": true,
+    "response_preview_chars": 2000,
+    "mask_secrets": false
+  }
+}

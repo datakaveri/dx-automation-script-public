@@ -1,0 +1,19 @@
+{
+  "paths": {
+    "input_dir": "script/OGC_Automation_Script/Raster_Automation/5ddcbdd8-3040-48f3-9a0c-5916c0c0d3be",
+    "output_dir": "/home/ankit/Downloads"
+  },
+  "stac": {
+    "collection_id": "<collection_id>",
+    "href_prefix_override": null,
+    "title": "Auto-generated STAC Collection for GeoTIFFs",
+    "description": "This STAC collection contains raster GeoTIFF files and associated spatial metadata."
+  },
+  "api": {
+    "push_to_api": true,
+    "api_url": "https://v2.dev.iudx.io/geoserver-s3/stac/collections",
+    "api_base": "https://v2.dev.iudx.io/geoserver-s3/stac",
+    "auth_token": "<provider-token>",
+    "timeout_seconds": 60
+  }
+}

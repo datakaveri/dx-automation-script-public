@@ -1,0 +1,17 @@
+{
+  "base_url": "https://v2.dev.iudx.io/geoserver-s3",
+  "bucket_name": "<bucket_name>",
+  "region": "<bucket-region>",
+  "presigned_url_process_id": "5eee0ed4-2abb-4f24-9ffb-e69362bc0777",
+  "collection_onboarding_process_id": "9a3eadda-167d-4043-98be-246f3c66cb7a",
+  "batch_size": 5,
+  "token": "<provider-token>",
+  "files": [
+    {
+      "file_path": "/home/ankit/Downloads/CDPG-At-IISc_Dataset_862026.gpkg",
+      "label": "GPKG",
+      "description": "GPKG FOR TEST",
+      "ri_uuid": "<item-id>"
+    }
+  ]
+}
