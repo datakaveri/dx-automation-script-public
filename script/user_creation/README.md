@@ -7,7 +7,10 @@ its own config:
 user_creation/
 ├── consumer/
 │   ├── creation/   consumer_creation.py   + consumer_creation_config.json
-│   └── deletion/   consumer_deletion.py   + consumer_deletion_config.json
+│   ├── deletion/   consumer_deletion.py   + consumer_deletion_config.json
+│   └── prejoinorg/                        a consumer joined to an existing organisation
+│       ├── creation/   consumer_prejoinorg_creation.py + consumer_prejoinorg_creation_config.json
+│       └── deletion/   consumer_prejoinorg_deletion.py + consumer_prejoinorg_deletion_config.json
 ├── provider/
 │   ├── creation/   provider_creation.py   + provider_creation_config.json
 │   └── deletion/   provider_deletion.py   + provider_deletion_config.json
@@ -64,6 +67,18 @@ config if you would rather it were not written down.
 ControlPlane so the platform-side record exists. Deletion prefers
 `DELETE /iudx/v2/auth/user/delete`, which cascades into Keycloak and the
 database, and falls back to the Keycloak Admin API.
+
+**Consumer in an organisation** (`consumer/prejoinorg/`) — the same plain
+account, then joined to an organisation that already exists: the user submits a
+join request to `organisation.organisationId` (or `organisationName`, looked up
+in the organisation list), and that organisation's admin approves it with the
+credentials in `org_admin`. No provider role is requested, so the account is a
+consumer *and* an organisation member. `join.approve: false` files the request
+and leaves it pending, needing no org admin. The handoff record carries
+`org_id`, `org_name` and `join_request_id`; deletion self-deletes as for a plain
+consumer (which unwinds the membership) and never touches the organisation.
+`delete.remove_from_organisation` has the org admin drop the member first, for
+the Keycloak-only route.
 
 **Provider** — the platform never hands out the `provider` role directly, so
 `provider.mode` picks how the account earns it:
