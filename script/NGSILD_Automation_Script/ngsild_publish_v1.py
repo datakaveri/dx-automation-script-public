@@ -28,6 +28,7 @@ Two things worth knowing about this script:
     'inequivalent arg' error, which is how this bit them before.
 """
 
+import re
 import sys
 import ssl
 import json
@@ -35,7 +36,7 @@ import logging
 import argparse
 import configparser
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pika
 
@@ -163,8 +164,16 @@ def load_config(path):
 # JSON file so the payload is not pinned to this source file.
 # ============================================================
 
+# `bank_id` is not part of the CBO schema the rest of these fields describe.
+# It is here because the published data-plane collection's search folder filters
+# on exactly that field and value - `{"searchType": "term", "field": "bank_id",
+# "values": ["IDBI"]}` - and a term query against a field the data does not have
+# comes back "No data found for this index", which reads as a broken index
+# rather than as a query that matched nothing. Carrying the field is what lets
+# that folder's positive case be a real test of search.
 SAMPLE_DATA = [
     {
+        "bank_id": "IDBI",
         "cbocode": "CBO001",
         "cboname": "Sample CBO",
         "piuid": 101,
@@ -182,6 +191,7 @@ SAMPLE_DATA = [
         "subproject": "Sample Project"
     },
     {
+        "bank_id": "IDBI",
         "cbocode": "CBO002",
         "cboname": "Test CBO",
         "piuid": 102,
@@ -201,6 +211,7 @@ SAMPLE_DATA = [
 ]
 
 FIELDS = [
+    "bank_id",
     "cbocode", "cboname",
     "piuid", "piu",
     "riuid", "riu",
@@ -242,16 +253,83 @@ def load_records(path):
 # TRANSFORM
 # ============================================================
 
-def transform(records, resource_id):
+def parse_observation_end(text):
+    """The instant the newest record should carry, from `--observation-end`.
+
+    Accepts a naive local timestamp, with or without an offset - the offset is
+    read and discarded, because every stamp this script writes is a naive local
+    clock reading with DEFAULT_TIMEZONE_SUFFIX appended. Reading one and then
+    re-stamping it in a different zone would move the data by hours.
+    """
+    if not text:
+        return None
+    cleaned = str(text).strip()
+    cleaned = re.sub(r"(Z|[+-]\d{2}:?\d{2})$", "", cleaned)
+    for shape in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(cleaned, shape)
+        except ValueError:
+            continue
+    logger.error(
+        f"--observation-end is not a timestamp I can read: {text!r} "
+        f"(want 2025-11-01T00:00:00, an offset optional)"
+    )
+    sys.exit(EXIT_CONFIG)
+
+
+def observation_times(count, spread_hours, end=None):
+    """One observationDateTime per record, oldest first.
+
+    With no spread every record is stamped with the same instant, which is what
+    this script has always done and is fine for an availability check: the data
+    is there or it is not.
+
+    A temporal query is a different question. `timerel=between` asks for the
+    records that fall inside a window, and a dataset whose rows all share one
+    timestamp cannot answer it - the window either contains every row or none of
+    them, so a broken filter and a working one look the same. Spreading the rows
+    evenly across the last `spread_hours` gives the query something to actually
+    select from, and gives a `before`/`after` query a boundary to fall on.
+
+    `end` is where the newest record sits; the default is now, so the tail of
+    the data is at the present and a window ending now still finds it. It is
+    settable because a suite can assert against a threshold it wrote down: the
+    published data-plane collection's `200 - temporalOperations` compares every
+    observationDateTime it gets back against a date typed into its test script,
+    and data stamped after that date fails an assertion about a query that
+    worked. Publishing into the era the collection expects is the only way to
+    satisfy it without editing the collection.
+    """
+    end = end or datetime.now()
+
+    if not spread_hours or count < 2:
+        return [end.strftime(f"%Y-%m-%dT%H:%M:%S{DEFAULT_TIMEZONE_SUFFIX}")] * count
+
+    window = timedelta(hours=spread_hours)
+    step = window / (count - 1)
+
+    return [
+        (end - window + step * index).strftime(
+            f"%Y-%m-%dT%H:%M:%S{DEFAULT_TIMEZONE_SUFFIX}"
+        )
+        for index in range(count)
+    ]
+
+
+def transform(records, resource_id, spread_hours=0, observation_end=None):
     """Build NGSI-LD packets, one per input record."""
 
     logger.info(f"Transform started for {len(records)} record(s)")
 
-    observed_at = datetime.now().strftime(
-        f"%Y-%m-%dT%H:%M:%S{DEFAULT_TIMEZONE_SUFFIX}"
-    )
+    stamps = observation_times(len(records), spread_hours, observation_end)
 
-    logger.info(f"observationDateTime: {observed_at}")
+    if spread_hours and len(records) > 1:
+        logger.info(
+            f"observationDateTime: {stamps[0]} .. {stamps[-1]} "
+            f"({spread_hours}h spread over {len(records)} record(s))"
+        )
+    else:
+        logger.info(f"observationDateTime: {stamps[0] if stamps else 'n/a'}")
 
     packets = []
     skipped = 0
@@ -269,7 +347,7 @@ def transform(records, resource_id):
         for field in FIELDS:
             packet[field] = record.get(field)
 
-        packet["observationDateTime"] = observed_at
+        packet["observationDateTime"] = stamps[index - 1]
 
         # Flag missing fields so bad upstream data is visible
         missing = [key for key, value in packet.items() if value is None]
@@ -650,7 +728,11 @@ def main():
 
         logger.info(f"Expanded to {len(records)} record(s) via --count")
 
-    packets = transform(records, exchange)
+    observation_end = parse_observation_end(args.observation_end)
+    if observation_end:
+        logger.info(f"observationDateTime anchored at {observation_end.isoformat()}")
+
+    packets = transform(records, exchange, args.spread_hours, observation_end)
 
     if not packets:
         logger.error("No packets to publish after transform")
@@ -697,6 +779,23 @@ def parse_args():
         type=int,
         help="publish this many packets, cycling through the source "
              "records (useful for load checks)"
+    )
+
+    parser.add_argument(
+        "--observation-end",
+        metavar="TIMESTAMP",
+        help="stamp the newest record at this instant instead of now, e.g. "
+             "2025-11-01T00:00:00; older records are spread backwards from it"
+    )
+
+    parser.add_argument(
+        "--spread-hours",
+        type=float,
+        default=0,
+        help="spread observationDateTime evenly over this many hours, "
+             "ending now, instead of stamping every record with the same "
+             "instant - so a temporal query has a range to select from "
+             "(default: 0, one instant for all records)"
     )
 
     parser.add_argument(

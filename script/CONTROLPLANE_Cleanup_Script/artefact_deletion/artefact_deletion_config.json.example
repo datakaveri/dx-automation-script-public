@@ -1,0 +1,40 @@
+{
+  "control_plane": {
+    "base_url": "https://<controlplane-host>",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "acl": {
+    "base_url": ""
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "user_client_id": "postman-client",
+    "user_client_secret": "",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "actors": {
+    "cos_admin": { "username": "", "password": "${COS_ADMIN_PASS:-}", "token": "" },
+    "provider":  { "username": "", "password": "${PROVIDER_PASS:-}", "token": "" },
+    "consumer":  { "username": "", "password": "${CONSUMER_PASS:-}", "token": "" }
+  },
+  "target": {
+    "resource_server": [],
+    "credit_request": [],
+    "compute_request": [],
+    "delegation": [],
+    "asset_request": [],
+    "subscription": [],
+    "app": [],
+    "user_feedback": [],
+    "provider_feedback": [],
+    "policy": [],
+    "item": []
+  },
+  "types": {},
+  "logging": {
+    "level": "INFO"
+  }
+}

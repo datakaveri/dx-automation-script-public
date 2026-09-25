@@ -213,6 +213,7 @@ privileged credential for testing.
 | `community` | The community layer — discussion and challenge, checked, never written to |
 | `postgres` | Residue sweep and row assertions |
 | `run` | Prefix, cleanup toggles, timeouts, report directory and filename |
+| `postman` | Read only by `complete-test/complete_test.py`: the collections, the phase list, and how newman is run. `main/e2e.py` ignores it |
 
 Resource servers are assumed already deployed — the harness never registers or
 deletes them. Each needs a `verify_path`: a GET that a granted token must be able
@@ -276,6 +277,22 @@ them, and set `enabled: false` to skip the phase entirely.
 
 The section is named for the server it publishes to, so the other resource
 servers can grow one of their own without the keys colliding.
+
+`spread_hours` (default 24) spreads `observationDateTime` evenly backwards from
+the moment the publisher runs, rather than stamping every record with the same
+instant, and `count` (default 24) decides how many rows there are to spread. A
+`timerel=between` query asks which records fall inside a window, and a dataset
+whose rows all share one timestamp cannot answer it — the window holds all of
+them or none, so a broken filter and a working one look identical. Set
+`spread_hours: 0` for the old single-instant behaviour.
+
+The phase records the range it published into on the context as
+`ctx.ngsild_window`, in each of the three spellings a temporal query is written
+in (`+05:30`, `Z`, `+0530`). `complete-test` hands those to the data-plane
+collection as `data_window_*`, so what the publisher wrote and what a temporal
+query asks for cannot drift apart. Reading the data plane also needs `TEMPORAL`
+in the item's `resource_servers.ngsild.query_types` — that is what the server
+checks before it will answer a temporal query at all.
 
 The phase skips itself two ways. `ngsild_publish.enabled: false` turns it off
 outright. And an item that declares no NGSI-LD resource server — every
@@ -789,14 +806,26 @@ Ordering matters — an item cannot be removed after its owner:
 | Order | What | How |
 |---|---|---|
 | 1 | policy, catalogue item | ControlPlane API |
-| 2 | consumers | `DELETE /iudx/v2/auth/user/delete` — cascades to Keycloak and DB |
-| 3 | organisation | `DELETE .../organisations/{id}` — only when the DB sweep is off; the API cannot remove an org whose admin still exists |
-| 4 | requester (org admin), and the cos admin if the harness created one | Keycloak Admin API — self-delete refuses org admins |
-| 5 | everything else | Postgres sweep, if `run.sweep_database` |
-| 6 | verify | re-query Keycloak and Postgres; fail the run if anything survived |
+| 2 | each consumer's credit balance, credit and compute requests | `PUT /admin/user/credit/deduct` as the cos_admin, then the account's own DELETEs — `run.unwind_compute_credit` |
+| 3 | consumers | `DELETE /iudx/v2/auth/user/delete` — cascades to Keycloak and DB |
+| 4 | organisation | `DELETE .../organisations/{id}` — only when the DB sweep is off; the API cannot remove an org whose admin still exists |
+| 5 | requester (org admin), and the cos admin if the harness created one | Keycloak Admin API — self-delete refuses org admins |
+| 6 | everything else | Postgres sweep, if `run.sweep_database` |
+| 7 | verify | re-query Keycloak and Postgres; fail the run if anything survived |
 
 Teardown runs whether the flow passed or failed. `run.verify_cleanup` makes
 "cleaned up" something the harness asserts rather than assumes.
+
+Step 2 is there because the collection's own 05/06 teardown folders cannot
+finish the job: they delete a credit or compute request by the id the flow
+captured, and only while it is still pending — `DELETE /user/credit/request/{id}`
+answers 400 "Only pending credit requests can be deleted" for the ones the flow
+approved. Nothing on the platform zeroes a balance except the cos_admin deduct
+endpoint, the inverse of `/credit/add`. The rows themselves — `user_credits`,
+`credit_transactions`, `credit_requests`, `compute_role`, `kyc_transactions` —
+survive every endpoint and go with the sweep. `compute_role` is the one to
+watch: its `user_id` is UNIQUE, so while that row lives the account can never
+request the compute role again.
 
 `run.sweep_older_than_hours` is an age guard on leftovers belonging to *other*
 runs sharing the prefix. It defaults to 0 — no guard, sweep everything under the

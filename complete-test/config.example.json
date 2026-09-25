@@ -1,0 +1,790 @@
+{
+  "control_plane": {
+    "base_url": "https://controlplane.example.com",
+    "timeout_seconds": 30
+  },
+  "acl": {
+    "base_url": "https://acl.example.com",
+    "apd_url": null
+  },
+  "keycloak": {
+    "url": "https://keycloak.example.com/auth",
+    "realm": "iudx",
+    "admin_client_id": "aaa-admin",
+    "admin_client_secret": "${E2E_KC_ADMIN_SECRET}",
+    "user_client_id": "postman-client",
+    "user_client_secret": null,
+    "roles": {
+      "cos_admin": "cos_admin",
+      "org_admin": "org_admin",
+      "provider": "provider"
+    }
+  },
+  "cos_admin": {
+    "username": "${E2E_COS_ADMIN_USER:-}",
+    "password": "${E2E_COS_ADMIN_PASS:-}"
+  },
+  "resource_servers": {
+    "ngsild": {
+      "name": "NGSI-LD",
+      "type": "ngsi-ld",
+      "scheme": "https",
+      "url": "rs.example.com",
+      "verify_path": "/ngsi-ld/v1/entities",
+      "access_types": [
+        "api"
+      ],
+      "query_types": [
+        "ATTR",
+        "TEMPORAL"
+      ],
+      "reference_item_id": null,
+      "dataset_type": "DATASET",
+      "expect_denied": [
+        401,
+        403
+      ],
+      "enabled": true
+    },
+    "gateway": {
+      "name": "GATEWAY",
+      "type": "gateway",
+      "scheme": "https",
+      "url": "gateway.example.com",
+      "verify_path": "/ngsi-ld/v1/entities",
+      "access_types": [
+        "api"
+      ],
+      "query_types": [
+        "ATTR",
+        "TEMPORAL"
+      ],
+      "reference_item_id": "ff2ee34b-61a0-4881-afa3-f6f2d0e66911",
+      "dataset_type": "DATASET",
+      "expect_denied": [
+        401,
+        403
+      ],
+      "enabled": true
+    },
+    "ogc": {
+      "name": "OGC",
+      "type": "ogc",
+      "scheme": "https",
+      "url": "ogc.example.com",
+      "verify_path": "/collections/{item_id}",
+      "access_types": [
+        "api"
+      ],
+      "raster": false,
+      "stac_verify_path": "/stac/collections/{item_id}/items",
+      "dataset_type": "DATASET",
+      "expect_denied": [],
+      "stac_expect_denied": [],
+      "enabled": true
+    },
+    "file": {
+      "name": "FILE",
+      "type": "file",
+      "scheme": "https",
+      "url": "file.example.com",
+      "verify_path": "/v1/databanks/{item_id}/download",
+      "access_types": [
+        "file"
+      ],
+      "query_types": [],
+      "dataset_type": "DATASET",
+      "expect_denied": [
+        401,
+        403
+      ],
+      "enabled": true
+    }
+  },
+  "databroker": {
+    "enabled": false,
+    "host": "databroker.example.com",
+    "management_port": 15672,
+    "username": "${E2E_RMQ_USER:-admin}",
+    "password": "${E2E_RMQ_PASS:-}",
+    "vhost": "IUDX-V2-INTERNAL",
+    "auditing_exchange": "auditing",
+    "use_tls": true
+  },
+  "ngsild_publish": {
+    "enabled": true,
+    "script": "../script/NGSILD_Automation_Script/ngsild_publish_v1.py",
+    "host": null,
+    "port": 24567,
+    "username": null,
+    "password": null,
+    "vhost": "IUDX-V2",
+    "cert_path": "../script/NGSILD_Automation_Script/rabbitmq-ca.crt",
+    "check_hostname": false,
+    "queue_name": "database",
+    "data_file": null,
+    "count": 24,
+    "spread_hours": 24,
+    "observation_end": null,
+    "verbose": false,
+    "settle_seconds": 2,
+    "retries": 0,
+    "retry_delay_seconds": 5
+  },
+  "gateway_adaptor": {
+    "enabled": true,
+    "script": "../script/GATEWAY_Automation_Script/gateway.py",
+    "host": null,
+    "port": 24567,
+    "username": null,
+    "password": null,
+    "vhost": "IUDX-V2-INTERNAL",
+    "cert_path": "../script/GATEWAY_Automation_Script/rabbitmq-ca.crt",
+    "check_hostname": false,
+    "queue_name": null,
+    "api_url": null,
+    "results_key": "users",
+    "data_file": null,
+    "startup_seconds": 2,
+    "verbose": false
+  },
+  "gateway_delete": {
+    "enabled": true,
+    "script": "../script/GATEWAY_Automation_Script/delete_rmq.py",
+    "host": null,
+    "port": null,
+    "username": null,
+    "password": null,
+    "vhost": null,
+    "cert_path": null,
+    "check_hostname": null,
+    "mgmt_url": null,
+    "mgmt_verify": null,
+    "queue_name": null,
+    "delete_user": null,
+    "verbose": false
+  },
+  "ogc_vector": {
+    "enabled": true,
+    "script": "../script/OGC_Automation_Script/Vector_Automation/Creation/vector_creation.py",
+    "base_url": null,
+    "gpkg_path": "/path/to/sample.gpkg",
+    "bucket_name": "${E2E_OGC_BUCKET:-}",
+    "region": "${E2E_OGC_REGION:-}",
+    "batch_size": 5,
+    "label": "E2E vector collection",
+    "description": "Automated end-to-end test asset. Safe to delete.",
+    "ensure_provider_role": true,
+    "provider_username": "${E2E_OGC_PROVIDER_USER:-}",
+    "provider_password": "${E2E_OGC_PROVIDER_PASS:-}",
+    "token_user": "requester",
+    "token_kind": "identity",
+    "settle_seconds": 15,
+    "retries": 0,
+    "retry_delay_seconds": 15,
+    "verbose": false
+  },
+  "ogc_postgres": {
+    "host": null,
+    "port": null,
+    "database": "ogc_rs_v2",
+    "schema": null,
+    "user": null,
+    "password": "${E2E_OGC_DB_PASS:-}"
+  },
+  "ogc_raster": {
+    "enabled": true,
+    "ingest_script": "../script/OGC_Automation_Script/Raster_Automation/Creation/stac_injestion.py",
+    "upload_script": "../script/OGC_Automation_Script/Raster_Automation/S3Upload/S3.py",
+    "tif_dir": "../script/OGC_Automation_Script/Raster_Automation/5ddcbdd8-3040-48f3-9a0c-5916c0c0d3be",
+    "base_url": null,
+    "title": "E2E raster collection",
+    "description": "Automated end-to-end test asset. Safe to delete.",
+    "bucket": null,
+    "region": null,
+    "endpoint": null,
+    "aws_access_key_id": "${E2E_OGC_S3_KEY:-}",
+    "aws_secret_access_key": "${E2E_OGC_S3_SECRET:-}",
+    "timeout_seconds": 60,
+    "ingest_settle_seconds": 5,
+    "upload_settle_seconds": 15,
+    "token_user": "requester",
+    "token_kind": "identity",
+    "verbose": false
+  },
+  "ogc_raster_delete": {
+    "enabled": true,
+    "script": "../script/OGC_Automation_Script/Raster_Automation/Deletion/stac_deletion.py",
+    "batch_size": 100,
+    "delete_delay": 0.2,
+    "request_timeout": 60,
+    "verbose": false
+  },
+  "ogc_s3_cleanup": {
+    "enabled": true,
+    "script": "../script/OGC_Automation_Script/Extra_To_Clean_S3/s3_deleteion.py",
+    "bucket": null,
+    "region": null,
+    "aws_access_key_id": null,
+    "aws_secret_access_key": null,
+    "verbose": false
+  },
+  "ogc_vector_delete": {
+    "enabled": true,
+    "keep_on_failure": true,
+    "script": "../script/OGC_Automation_Script/Vector_Automation/Deletion/vector_deletion.py",
+    "verbose": false
+  },
+  "file_upload": {
+    "enabled": true,
+    "script": "../script/FILE_Automation_Script/creation/file_creation.py",
+    "base_url": null,
+    "api_version": "v1",
+    "file_path": "../script/FILE_Automation_Script/creation/postman-upload.csv",
+    "key": null,
+    "content_type": null,
+    "verify_tls": true,
+    "request_timeout_seconds": 120,
+    "max_retries": 3,
+    "part_size_mb": 100,
+    "processing_enabled": true,
+    "processing_type": "all",
+    "processing_uploaded_only": false,
+    "processing_wait": true,
+    "processing_poll_seconds": 5,
+    "processing_timeout_seconds": 600,
+    "token_user": "requester",
+    "token_kind": "identity",
+    "settle_seconds": 5,
+    "verbose": false
+  },
+  "file_delete": {
+    "enabled": true,
+    "script": "../script/FILE_Automation_Script/deletion/file_deletion.py",
+    "verbose": false
+  },
+  "ngsild_delete": {
+    "enabled": false,
+    "script": "../script/NGSILD_Automation_Script/ngsild_delete_v1.py",
+    "kibana_host": "https://kibana.example.com",
+    "kibana_username": "${E2E_KIBANA_USER:-}",
+    "kibana_password": "${E2E_KIBANA_PASS:-}",
+    "mgmt_url": "https://databroker.example.com",
+    "username": null,
+    "password": null,
+    "vhost": null,
+    "index_prefix": "iudx-v2__",
+    "mgmt_verify": "true",
+    "delete_user": null,
+    "dry_run": false,
+    "verbose": false
+  },
+  "postgres": {
+    "enabled": false,
+    "host": "postgres.example.com",
+    "port": 5432,
+    "database": "iudx_v2_auth",
+    "schema": "aaa",
+    "user": "postgres",
+    "password": "${E2E_PG_PASS:-}",
+    "sslmode": "require"
+  },
+  "run": {
+    "prefix": "e2e",
+    "user_password": "E2eTest@Pass1",
+    "email_domain": "example.invalid",
+    "cleanup": true,
+    "verify_cleanup": true,
+    "unwind_compute_credit": true,
+    "sweep_database": false,
+    "sweep_older_than_hours": 0,
+    "delete_audit_rows": false,
+    "delete_all_cos_admin_data": false,
+    "audit_timeout_seconds": 60,
+    "access_expiry_days": 730,
+    "verify_resource_servers": true,
+    "response_preview_chars": 800,
+    "report_dir": "reports",
+    "report_file": "complete-test-report.html"
+  },
+  "postman": {
+    "enabled": true,
+    "newman_bin": null,
+    "auto_install": true,
+    "install_dir": null,
+    "html_report": true,
+    "report_file": "newman-report.html",
+    "html_report_bodies": false,
+    "newman_html_report": false,
+    "newman_html_dir": null,
+    "newman_html_skip_headers": ["Authorization"],
+    "newman_html_hide_bodies": [],
+    "work_dir": null,
+    "keep_work_dir": true,
+    "request_timeout_ms": 60000,
+    "max_phase_seconds": null,
+    "delay_request_ms": 0,
+    "insecure": false,
+    "bail": false,
+    "fail_on_assertion_failure": false,
+    "fail_on_broken_request": true,
+    "fail_on_unanswered_request": true,
+    "seed_from_environment_file": true,
+    "as_shipped": false,
+    "as_shipped_skip_deletes": true,
+    "namespace_names": true,
+    "skip_delete_requests": false,
+    "destructive_requests": [
+      "*Deactivate*",
+      "*Revoke*"
+    ],
+    "collections": {
+      "controlplane": {
+        "enabled": true,
+        "collection": "resource/Controlplane_restructured_collection_phase_3/DX_Control_Plane_API_Tests.postman_collection.json",
+        "environment": "resource/Controlplane_restructured_collection_phase_3/contrlplane-evm-realm-tgdex-pilot.postman_environment.json"
+      },
+      "dataplane": {
+        "enabled": true,
+        "collection": "resource/Gateway_Ngsild_server_phase_FINAL/SIRPI SIRPI DX-Data-Plane SIRPI.postman_collection.json",
+        "environment": "resource/Gateway_Ngsild_server_phase_FINAL/SIRPI SIRPI Data Plane Enviroment.postman_environment.json",
+        "variables": {
+          "base_url": "{{ngsild_host}}/dataplane",
+          "basePath": "ngsi-ld/v2",
+          "basePathV1": "ngsi-ld/v1",
+          "keycloak-url": "{{kc_netloc}}",
+          "clientID": "{{created_client_id}}",
+          "clientSecret": "{{created_client_secret}}",
+          "sampleResourceId": "{{item_id}}",
+          "entitiesResourceId": "{{item_id}}",
+          "temporalResourceId": "{{item_id}}",
+          "gatewayResourceId": "{{gateway_item_id}}",
+          "nonExistentResourceId": "00000000-0000-0000-0000-000000000000",
+          "gatewayNonExistentResourceId": "00000000-0000-0000-0000-000000000000",
+          "invalidFormatResourceId": "invalid-id-format-123",
+          "restrictedResourceId": "ac69313c-9f74-47ae-9283-f06031a69583",
+          "appidusername": "{{app_id}}",
+          "appidusernamepass": "{{app_secret}}"
+        },
+        "rewrite": {
+          "2021-03-28T21:43:44+05:30": "{{data_window_start}}",
+          "2026-03-29T21:43:44+05:30": "{{data_window_end}}",
+          "2025-11-02T09:15:27Z": "{{data_window_end_utc}}",
+          "2026-05-02T09:15:27+0530": "{{data_window_end}}",
+          "2026-05-02T09:15:27+05:30": "{{data_window_end}}",
+          "2020-11-15T14:20:00Z": "{{data_window_mid_utc}}",
+          "2020-12-28T14:20:00Z": "{{data_window_end_utc}}",
+          "2020-11-18T14:20:00Z": "{{data_window_mid_utc}}",
+          "2021-03-28T14:20:00Z": "{{data_window_mid_utc}}",
+          "2021-03-29T14:20:00Z": "{{data_window_end_utc}}",
+          "\"field\": \"bank_id\"": "\"field\": \"bank_id.keyword\""
+        }
+      }
+    },
+    "default_collection": "controlplane",
+    "extra_variables": {},
+    "phases": [
+      {
+        "name": "00 users",
+        "type": "script",
+        "step": "create_users"
+      },
+      {
+        "name": "00 auth & token",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "00"
+      },
+      {
+        "name": "01 resource servers",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "01"
+      },
+      {
+        "name": "02 organisation",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "02"
+      },
+      {
+        "name": "02 org roles",
+        "type": "script",
+        "step": "await_org_roles"
+      },
+      {
+        "name": "03 user & role",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "03",
+        "personas": {
+          "consumer": "consumer3"
+        }
+      },
+      {
+        "name": "04 kyc",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "04",
+        "personas": {
+          "consumer": "consumer2"
+        },
+        "required": false
+      },
+      {
+        "name": "05 credit",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "05",
+        "required": false
+      },
+      {
+        "name": "06 compute",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "06",
+        "required": false
+      },
+      {
+        "name": "07 delegation",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "07",
+        "required": false
+      },
+      {
+        "name": "08 catalogue crud",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "08"
+      },
+      {
+        "name": "08 item",
+        "type": "script",
+        "step": "create_item"
+      },
+      {
+        "name": "19 acl apd",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "19"
+      },
+      {
+        "name": "19 policy",
+        "type": "script",
+        "step": "ensure_policy"
+      },
+      {
+        "name": "09 discovery",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "09"
+      },
+      {
+        "name": "10 organisation assets",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "10",
+        "required": false
+      },
+      {
+        "name": "11 asset requests",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "11",
+        "required": false,
+        "request_timeout_ms": 15000
+      },
+      {
+        "name": "12 subscriptions",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "12",
+        "required": false
+      },
+      {
+        "name": "13 app management",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "13",
+        "required": false
+      },
+      {
+        "name": "14 client management",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "14"
+      },
+      {
+        "name": "15 leaderboard",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "15",
+        "required": false
+      },
+      {
+        "name": "16 interactions & feedback",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "16",
+        "required": false
+      },
+      {
+        "name": "20 data onboarding",
+        "type": "script",
+        "step": "data_onboarding"
+      },
+      {
+        "name": "21 resource servers",
+        "type": "script",
+        "step": "resource_servers"
+      },
+      {
+        "name": "23 data plane token",
+        "type": "postman",
+        "server": [
+          "ngsild",
+          "gateway"
+        ],
+        "collection": "dataplane",
+        "folder": "Token",
+        "required": false
+      },
+      {
+        "name": "24 ngsi-ld temporal & entities",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "NGSILD",
+        "required": false
+      },
+      {
+        "name": "25 ngsi-ld latest data",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "Latest Data",
+        "required": false
+      },
+      {
+        "name": "26 ngsi-ld search",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "Search Data",
+        "required": false
+      },
+      {
+        "name": "27 ngsi-ld download",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "Download Data",
+        "required": false
+      },
+      {
+        "name": "28 ngsi-ld app id auth",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "Using Appid",
+        "required": false
+      },
+      {
+        "name": "29 gateway entities search (reference item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "EntitiesSearch",
+        "variables": {
+          "gatewayResourceId": "{{gateway_reference_id}}"
+        },
+        "required": false,
+        "when": "config:resource_servers.gateway.reference_item_id"
+      },
+      {
+        "name": "30 gateway complex search (reference item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "Complex Search",
+        "variables": {
+          "gatewayResourceId": "{{gateway_reference_id}}"
+        },
+        "required": false,
+        "when": "config:resource_servers.gateway.reference_item_id"
+      },
+      {
+        "name": "31 gateway entities search (this run's item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "EntitiesSearch",
+        "variables": {
+          "gatewayResourceId": "{{gateway_item_id}}"
+        },
+        "required": false,
+        "adaptor": "gateway"
+      },
+      {
+        "name": "32 gateway complex search (this run's item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "Complex Search",
+        "variables": {
+          "gatewayResourceId": "{{gateway_item_id}}"
+        },
+        "required": false,
+        "adaptor": "gateway"
+      },
+      {
+        "name": "17 auditing",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "17",
+        "required": false,
+        "request_timeout_ms": 15000,
+        "max_seconds": 60
+      },
+      {
+        "name": "22 audit trail",
+        "type": "script",
+        "step": "auditing"
+      },
+      {
+        "name": "18 dashboard",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "18",
+        "required": false
+      }
+    ],
+    "teardown": [
+      {
+        "name": "data plane",
+        "type": "script",
+        "step": "data_plane_cleanup"
+      },
+      {
+        "name": "deactivate policy",
+        "when": "policy_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "19",
+        "requests": [
+          "*Deactivate*"
+        ],
+        "required": false
+      },
+      {
+        "name": "delete catalogue item",
+        "when": "item_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "08",
+        "requests": [
+          "*Delete Item*"
+        ],
+        "required": false
+      },
+      {
+        "name": "revoke delegation",
+        "when": "delegation_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "07",
+        "requests": [
+          "*Revoke*"
+        ],
+        "required": false
+      },
+      {
+        "name": "delete subscription",
+        "when": "subscription_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "12",
+        "requests": [
+          "*Delete*"
+        ],
+        "required": false
+      },
+      {
+        "name": "delete app",
+        "when": "app_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "13",
+        "requests": [
+          "*Delete App 200*"
+        ],
+        "required": false
+      },
+      {
+        "name": "delete feedback",
+        "when": [
+          "user_feedback_id",
+          "provider_feedback_id"
+        ],
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "16",
+        "requests": [
+          "*Delete*Feedback*"
+        ],
+        "required": false
+      },
+      {
+        "name": "delete credit request",
+        "when": "credit_request_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "05",
+        "requests": [
+          "*Delete Credit Request*"
+        ],
+        "required": false
+      },
+      {
+        "name": "delete compute request",
+        "when": "compute_request_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "06",
+        "requests": [
+          "*Delete Request 200*"
+        ],
+        "required": false
+      },
+      {
+        "name": "delete asset request",
+        "when": "asset_request_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "11",
+        "requests": [
+          "*Delete 200*"
+        ],
+        "required": false,
+        "request_timeout_ms": 15000
+      },
+      {
+        "name": "delete resource server",
+        "when": "rs_id",
+        "type": "postman",
+        "server": "controlplane",
+        "folder": "01",
+        "requests": [
+          "*Delete 204*"
+        ],
+        "required": false
+      },
+      {
+        "name": "scripts",
+        "type": "script",
+        "step": "cleanup"
+      }
+    ]
+  }
+}

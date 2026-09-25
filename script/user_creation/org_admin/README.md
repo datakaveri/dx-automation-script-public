@@ -187,9 +187,9 @@ the three deletion scripts that talks to Postgres at all.
   mode auto|api  → self-delete (expected to be refused for an org admin)
   mode keycloak, or auto's fallback → DELETE /admin/realms/{realm}/users/{id}
   verify_gone           poll Keycloak until the account is absent
-  database_cleanup      sweep postgres.user_tables  on user_id
-  organisation_mode
-      postgres  →       sweep postgres.org_tables   on org_id
+  database_cleanup  ┐   one pass of the harness sweep (ControlPlane_Workflow/
+  organisation_mode ┘   cleanup.py SWEEP_STATEMENTS), anchored on user_id
+      postgres  →       and/or org_id — every table keyed on either
       none      →       log that the organisation is being left
       api       →       warn that it is still there
   consume_input_file    remove the handoff record
@@ -223,7 +223,7 @@ organisation id. You get a warning when that happens.
 |---|---|
 | `mode` | `keycloak` **(default here)** — Admin API only. `auto` — try the platform self-delete first, then finish through Keycloak (the self-delete leaves the account behind even when it succeeds, and refuses org admins outright anyway). `api` — self-delete only, and fail when the platform refuses, which for an org admin it will. |
 | `organisation_mode` | `postgres` (default) — clear the organisation with SQL. `api` — try `DELETE /organisations/{id}` first, and warn if it fails. `none` — leave the organisation standing. |
-| `database_cleanup` | Sweep the **user** rows (`postgres.user_tables`). Independent of `organisation_mode`, so you can clear the account's rows while keeping the organisation. |
+| `database_cleanup` | Sweep the rows keyed on the **user id**. Independent of `organisation_mode`, so you can clear the account's rows while keeping the organisation. |
 | `pause_seconds` | Wait before deleting. |
 | `verify` | Poll Keycloak until the account is gone, and **fail the run** if it is still there. |
 | `verify_timeout_seconds`, `verify_poll_seconds` | That polling window. |
@@ -237,32 +237,34 @@ left in place.
 | Key | Effect |
 |---|---|
 | `enabled` | **The master switch, `false` by default.** Nothing touches the database until this is true. |
-| `dry_run` | Print each `DELETE` and its parameter instead of running it. `--pg-dry-run` sets it for one run. |
+| `dry_run` | Run every `DELETE` inside one transaction, print the row counts, and roll back — the counts are real. `--pg-dry-run` sets it for one run. |
 | `host`, `port`, `database`, `user`, `password`, `sslmode`, `connect_timeout_seconds` | The connection. |
 | `schema` | The schema the tables live in — `aaa` on this platform, not `public`. |
-| `user_tables` | `{table, column}` pairs swept on the **user id**. |
-| `org_tables` | `{table, column}` pairs swept on the **organisation id**. |
+| `audit_rows` | Also clear the append-only activity/audit log tables (`user_activity_audit_log`, its backup, `user_activity_log`, `activity_audit_log`). Only on a stack you own. |
+
+Which tables go is not configured here any more. The statements are the
+harness's own `SWEEP_STATEMENTS` in `script/ControlPlane_Workflow/cleanup.py`,
+**imported** rather than copied, so a table added there is cleared here too —
+which is why this script has to be run from inside this checkout. They cover
+every table the platform keys on a user or an organisation: memberships, join,
+provider and organisation-create requests, policies and access requests,
+credits, client/app credentials, roles, KYC, feedback, delegations, bookmarks,
+votes, leaderboards, the `organizations` row and the `user_table` row.
 
 How the sweep behaves:
 
-- **Ordering is yours to keep.** The statements run in list order, and
-  `organizations`/`id` is last in `org_tables` for exactly that reason — the
-  referencing rows have to go before the row they reference. If you add a
-  table, put it before `organizations`.
+- **Ordering is the harness's**: children before parents, `organizations` and
+  `user_table` last, because `policy.owner_id` and `provider_requests` are real
+  foreign keys.
 - **Missing tables and columns are skipped, not fatal.** `information_schema`
-  is read first, and anything the deployment does not have is logged and passed
-  over. Deployments drift; one statement naming an absent column would
-  otherwise abort the rest of the cleanup with it.
-- **Every statement is keyed on one id**, passed as a bound parameter — the
-  account's or the organisation's. There is no unqualified delete anywhere in
-  this script.
-
-Shipped `user_tables`: `organization_users.user_id`,
-`organization_join_requests.user_id`, `provider_requests.user_id`,
-`organization_create_requests.requested_by`.
-Shipped `org_tables`: `provider_requests.organization_id`,
-`organization_join_requests.organization_id`,
-`organization_users.organization_id`, `organizations.id`.
+  is read first; a table the deployment lacks is skipped, a column it lacks is
+  dropped from its OR-group, and a statement that would lose its whole anchor
+  is skipped rather than widened.
+- **Every statement is anchored on this account's id and/or this
+  organisation's id.** The sweep's other anchors — the name prefix, item ids,
+  the cos_admin — are set to values that cannot match, so nothing else can go.
+  `postgres.user_tables` / `org_tables` from older configs are ignored, with a
+  log line saying so.
 
 
 ## Environment

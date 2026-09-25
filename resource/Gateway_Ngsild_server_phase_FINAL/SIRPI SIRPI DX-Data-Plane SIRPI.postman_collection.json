@@ -1,0 +1,3470 @@
+{
+	"info": {
+		"_postman_id": "080d36ec-bdc5-46ec-bc78-b6d136465b5a",
+		"name": "SIRPI SIRPI DX-Data-Plane SIRPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "20457128"
+	},
+	"item": [
+		{
+			"name": "Token",
+			"item": [
+				{
+					"name": "Consumer Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"response is 200 (OK)\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"consumerToken\", jsonData.access_token);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "password",
+									"type": "text"
+								},
+								{
+									"key": "client_id",
+									"value": "frontend-client",
+									"type": "text"
+								},
+								{
+									"key": "username",
+									"value": "{{consumer_user}}",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "{{consumer_pass}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://{{keycloak-url}}/auth/realms/iudx-v2/protocol/openid-connect/token",
+							"protocol": "https",
+							"host": [
+								"{{keycloak-url}}"
+							],
+							"path": [
+								"auth",
+								"realms",
+								"iudx-v2",
+								"protocol",
+								"openid-connect",
+								"token"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Client id and Client Secret",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{consumerToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://v2.dev.iudx.io/controlplane/iudx/v2/auth/client",
+							"protocol": "https",
+							"host": [
+								"v2",
+								"dev",
+								"iudx",
+								"io"
+							],
+							"path": [
+								"controlplane",
+								"iudx",
+								"v2",
+								"auth",
+								"client"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "AAA Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// pm.test(\"response is 200 (OK)\", function () {",
+									"//     pm.response.to.have.status(200);",
+									"// });",
+									"",
+									"// var jsonData = JSON.parse(responseBody);",
+									"// postman.setEnvironmentVariable(\"consumer_token\", jsonData.access_token);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "clientId",
+								"value": "{{clientID}}"
+							},
+							{
+								"key": "clientSecret",
+								"value": "{{clientSecret}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "https://v2.dev.iudx.io/controlplane/iudx/v2/auth/token",
+							"protocol": "https",
+							"host": [
+								"v2",
+								"dev",
+								"iudx",
+								"io"
+							],
+							"path": [
+								"controlplane",
+								"iudx",
+								"v2",
+								"auth",
+								"token"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "NGSILD_SERVER",
+			"item": [
+				{
+					"name": "NGSILD",
+					"item": [
+						{
+							"name": "200 - temporal",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response is an array\", function () {\n    pm.expect(jsonData).to.be.an(\"array\");\n});\n\npm.test(\"Array is not empty\", function () {\n    pm.expect(jsonData.length).to.be.above(0);\n});\n\npm.test(\"Array length respects limit param\", function () {\n    const limit = parseInt(pm.request.url.query.get(\"limit\"));\n    pm.expect(jsonData.length).to.be.at.most(limit);\n});\n\npm.test(\"Every item has id matching requested resource\", function () {\n    const expectedId = pm.environment.get(\"temporalResourceId\");\n    jsonData.forEach(item => {\n        pm.expect(item.id).to.eql(expectedId);\n    });\n});\n\npm.test(\"Every item has observationDateTime\", function () {\n    jsonData.forEach(item => {\n        pm.expect(item).to.have.property(\"observationDateTime\");\n    });\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entities?timerel=between&timeAt=2021-03-28T21:43:44+05:30&timeproperty=observationDateTime&endTimeAt=2026-03-29T21:43:44+05:30&offset=0&limit=5&id={{temporalResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "timerel",
+											"value": "between"
+										},
+										{
+											"key": "timeAt",
+											"value": "2021-03-28T21:43:44+05:30"
+										},
+										{
+											"key": "timeproperty",
+											"value": "observationDateTime"
+										},
+										{
+											"key": "endTimeAt",
+											"value": "2026-03-29T21:43:44+05:30"
+										},
+										{
+											"key": "pick",
+											"value": "child_above_poverty_line,families_above_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "5"
+										},
+										{
+											"key": "id",
+											"value": "{{temporalResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 - temporal Count",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is CountResult\", function () {\n    pm.expect(jsonData.type).to.eql(\"CountResult\");\n});\n\npm.test(\"Response has a numeric value\", function () {\n    pm.expect(jsonData).to.have.property(\"value\");\n    pm.expect(jsonData.value).to.be.a(\"number\");\n});"
+										]
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entities?timerel=between&timeAt=2021-03-28T21:43:44+05:30&timeproperty=observationDateTime&endTimeAt=2026-03-29T21:43:44+05:30&offset=0&limit=5&id={{temporalResourceId}}&count=true",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "timerel",
+											"value": "between"
+										},
+										{
+											"key": "timeAt",
+											"value": "2021-03-28T21:43:44+05:30"
+										},
+										{
+											"key": "timeproperty",
+											"value": "observationDateTime"
+										},
+										{
+											"key": "endTimeAt",
+											"value": "2026-03-29T21:43:44+05:30"
+										},
+										{
+											"key": "pick",
+											"value": "child_above_poverty_line,families_above_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "5"
+										},
+										{
+											"key": "id",
+											"value": "{{temporalResourceId}}"
+										},
+										{
+											"key": "count",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "400 - temporal",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is badRequest\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\r\n});\r\n\r\npm.test(\"Response title is Bad Request\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"endTimeAt is mandatory when timerel=between\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entities?timerel=between&timeAt=2021-03-28T21:43:44+05:30&timeproperty=observationDateTime&offset=0&limit=5&id={{temporalResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "timerel",
+											"value": "between"
+										},
+										{
+											"key": "timeAt",
+											"value": "2021-03-28T21:43:44+05:30"
+										},
+										{
+											"key": "timeproperty",
+											"value": "observationDateTime"
+										},
+										{
+											"key": "endTimeAt",
+											"value": "2026-03-29T21:43:44+05:30",
+											"disabled": true
+										},
+										{
+											"key": "pick",
+											"value": "child_above_poverty_line,families_above_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "5"
+										},
+										{
+											"key": "id",
+											"value": "{{temporalResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 - temporal",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\r\n    pm.response.to.have.status(401);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notAuthorized\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\r\n});\r\n\r\npm.test(\"Response title is Not Authorized\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entities?timerel=between&timeAt=2021-03-28T21:43:44+05:30&timeproperty=observationDateTime&endTimeAt=2026-03-29T21:43:44+05:30&offset=0&limit=5&id={{temporalResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "timerel",
+											"value": "between"
+										},
+										{
+											"key": "timeAt",
+											"value": "2021-03-28T21:43:44+05:30"
+										},
+										{
+											"key": "timeproperty",
+											"value": "observationDateTime"
+										},
+										{
+											"key": "endTimeAt",
+											"value": "2026-03-29T21:43:44+05:30"
+										},
+										{
+											"key": "pick",
+											"value": "child_above_poverty_line,families_above_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "5"
+										},
+										{
+											"key": "id",
+											"value": "{{temporalResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 - temporal",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notFound\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notFound\");\r\n});\r\n\r\npm.test(\"Response title is Not Found\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entities?timerel=between&timeAt=2021-03-28T21:43:44+05:30&timeproperty=observationDateTime&endTimeAt=2026-03-29T21:43:44+05:30&offset=0&limit=5&id={{nonExistentResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "timerel",
+											"value": "between"
+										},
+										{
+											"key": "timeAt",
+											"value": "2021-03-28T21:43:44+05:30"
+										},
+										{
+											"key": "timeproperty",
+											"value": "observationDateTime"
+										},
+										{
+											"key": "endTimeAt",
+											"value": "2026-03-29T21:43:44+05:30"
+										},
+										{
+											"key": "pick",
+											"value": "child_above_poverty_line,families_above_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "5"
+										},
+										{
+											"key": "id",
+											"value": "{{nonExistentResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 - entities",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response is an array\", function () {\n    pm.expect(jsonData).to.be.an(\"array\");\n});\n\npm.test(\"Array is not empty\", function () {\n    pm.expect(jsonData.length).to.be.above(0);\n});\n\npm.test(\"Array length does not exceed default limit\", function () {\n    pm.expect(jsonData.length).to.be.at.most(100);\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entities?id={{entitiesResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "pick",
+											"value": "gender,irange_id,sc_male,obc_child_female,st_families",
+											"disabled": true
+										},
+										{
+											"key": "omit",
+											"value": "id,range_id,gender,bank_id",
+											"disabled": true
+										},
+										{
+											"key": "q",
+											"value": "st_child_male>48,obc_female>1,others_child_female<99,st_child_male>20,st_male<100,others_families<100",
+											"disabled": true
+										},
+										{
+											"key": "orderBy",
+											"value": "male_above_poverty_line:asc,families_below_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "1000",
+											"disabled": true
+										},
+										{
+											"key": "id",
+											"value": "{{entitiesResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 - entities Count",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is CountResult\", function () {\n    pm.expect(jsonData.type).to.eql(\"CountResult\");\n});\n\npm.test(\"Response has a numeric value\", function () {\n    pm.expect(jsonData).to.have.property(\"value\");\n    pm.expect(jsonData.value).to.be.a(\"number\");\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entities?id={{entitiesResourceId}}&count=true",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "pick",
+											"value": "gender,irange_id,sc_male,obc_child_female,st_families",
+											"disabled": true
+										},
+										{
+											"key": "omit",
+											"value": "id,range_id,gender,bank_id",
+											"disabled": true
+										},
+										{
+											"key": "q",
+											"value": "st_child_male>48,obc_female>1,others_child_female<99,st_child_male>20,st_male<100,others_families<100",
+											"disabled": true
+										},
+										{
+											"key": "orderBy",
+											"value": "male_above_poverty_line:asc,families_below_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "1000",
+											"disabled": true
+										},
+										{
+											"key": "id",
+											"value": "{{entitiesResourceId}}"
+										},
+										{
+											"key": "count",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "400 - entities",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is badRequest\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\r\n});\r\n\r\npm.test(\"Response title is Bad Request\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Invalid query parameter 'id': does not match the required format\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entities?id={{invalidFormatResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "pick",
+											"value": "gender,irange_id,sc_male,obc_child_female,st_families",
+											"disabled": true
+										},
+										{
+											"key": "omit",
+											"value": "id,range_id,gender,bank_id",
+											"disabled": true
+										},
+										{
+											"key": "q",
+											"value": "st_child_male>48,obc_female>1,others_child_female<99,st_child_male>20,st_male<100,others_families<100",
+											"disabled": true
+										},
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "orderBy",
+											"value": "male_above_poverty_line:asc,families_below_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "1000",
+											"disabled": true
+										},
+										{
+											"key": "id",
+											"value": "{{invalidFormatResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 - entities",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\r\n    pm.response.to.have.status(401);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notAuthorized\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\r\n});\r\n\r\npm.test(\"Response title is Not Authorized\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entities?id={{entitiesResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "pick",
+											"value": "gender,irange_id,sc_male,obc_child_female,st_families",
+											"disabled": true
+										},
+										{
+											"key": "omit",
+											"value": "id,range_id,gender,bank_id",
+											"disabled": true
+										},
+										{
+											"key": "q",
+											"value": "st_child_male>48,obc_female>1,others_child_female<99,st_child_male>20,st_male<100,others_families<100",
+											"disabled": true
+										},
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "orderBy",
+											"value": "male_above_poverty_line:asc,families_below_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "1000",
+											"disabled": true
+										},
+										{
+											"key": "id",
+											"value": "{{entitiesResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 - entities",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notFound\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notFound\");\r\n});\r\n\r\npm.test(\"Response title is Not Found\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entities?id={{nonExistentResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "pick",
+											"value": "gender,irange_id,sc_male,obc_child_female,st_families",
+											"disabled": true
+										},
+										{
+											"key": "omit",
+											"value": "id,range_id,gender,bank_id",
+											"disabled": true
+										},
+										{
+											"key": "q",
+											"value": "st_child_male>48,obc_female>1,others_child_female<99,st_child_male>20,st_male<100,others_families<100",
+											"disabled": true
+										},
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "orderBy",
+											"value": "male_above_poverty_line:asc,families_below_poverty_line",
+											"disabled": true
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "1000",
+											"disabled": true
+										},
+										{
+											"key": "id",
+											"value": "{{nonExistentResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 - entitiesOperation",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response is an array\", function () {\n    pm.expect(jsonData).to.be.an(\"array\");\n});\n\npm.test(\"Array is not empty\", function () {\n    pm.expect(jsonData.length).to.be.above(0);\n});\n\npm.test(\"Array length respects limit param\", function () {\n    const limit = parseInt(pm.request.url.query.get(\"limit\"));\n    pm.expect(jsonData.length).to.be.at.most(limit);\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{entitiesResourceId}}\"\n        }\n    ]\n\n    //\"pick\": \"gender\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entityOperations/query?limit=2&format=simplified",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2"
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "format",
+											"value": "simplified"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 - entitiesOperation Count",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is CountResult\", function () {\n    pm.expect(jsonData.type).to.eql(\"CountResult\");\n});\n\npm.test(\"Response has a numeric value\", function () {\n    pm.expect(jsonData).to.have.property(\"value\");\n    pm.expect(jsonData.value).to.be.a(\"number\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{entitiesResourceId}}\"\n        }\n    ]\n\n    //\"pick\": \"gender\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entityOperations/query?limit=2&format=simplified&count=true",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2"
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "format",
+											"value": "simplified"
+										},
+										{
+											"key": "count",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "400 - entitiesOperation",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is badRequest\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\r\n});\r\n\r\npm.test(\"Response title is Bad Request\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Invalid request body: missing required property 'entities'\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entityOperations/query?limit=2&format=simplified",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2"
+										},
+										{
+											"key": "format",
+											"value": "simplified"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 - entitiesOperation",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\r\n    pm.response.to.have.status(401);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notAuthorized\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\r\n});\r\n\r\npm.test(\"Response title is Not Authorized\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{entitiesResourceId}}\"\n        }\n    ]\n\n    //\"pick\": \"gender\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entityOperations/query?limit=2&format=simplified",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2"
+										},
+										{
+											"key": "format",
+											"value": "simplified"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 - entitiesOperation",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notFound\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notFound\");\r\n});\r\n\r\npm.test(\"Response title is Not Found\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{nonExistentResourceId}}\"\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entityOperations/query?limit=2&format=simplified",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2"
+										},
+										{
+											"key": "format",
+											"value": "simplified"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 - temporalOperations",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\r",
+											"    pm.response.to.have.status(200);\r",
+											"});\r",
+											"\r",
+											"const jsonData = pm.response.json();\r",
+											"\r",
+											"pm.test(\"Response is an array\", function () {\r",
+											"    pm.expect(jsonData).to.be.an(\"array\");\r",
+											"});\r",
+											"\r",
+											"pm.test(\"Array is not empty\", function () {\r",
+											"    pm.expect(jsonData.length).to.be.above(0);\r",
+											"});\r",
+											"\r",
+											"pm.test(\"Array length respects limit param\", function () {\r",
+											"    const limit = parseInt(pm.request.url.query.get(\"limit\"));\r",
+											"    pm.expect(jsonData.length).to.be.at.most(limit);\r",
+											"});\r",
+											"\r",
+											"pm.test(\"Every item has id matching requested resource\", function () {\r",
+											"    const expectedId = pm.environment.get(\"temporalResourceId\");\r",
+											"    jsonData.forEach(item => {\r",
+											"        pm.expect(item.id).to.eql(expectedId);\r",
+											"    });\r",
+											"});\r",
+											""
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{temporalResourceId}}\"\n        }\n    ],\n    \"temporalQ\": {\n        \"timerel\": \"before\",\n        \"timeAt\": \"2025-11-02T09:15:27Z\",\n        \"timeproperty\": \"observationDateTime\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entityOperations/query?offset=0&limit=2",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "2"
+										},
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 - temporalOperations Count",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is CountResult\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"CountResult\");\r\n});\r\n\r\npm.test(\"Response has a numeric value\", function () {\r\n    pm.expect(jsonData).to.have.property(\"value\");\r\n    pm.expect(jsonData.value).to.be.a(\"number\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{temporalResourceId}}\"\n        }\n    ],\n    \"temporalQ\": {\n        \"timerel\": \"before\",\n        \"timeAt\": \"2025-11-02T09:15:27Z\",\n        \"timeproperty\": \"observationDateTime\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entityOperations/query?count=true",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "count",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "400 - temporalOperations",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\n    pm.response.to.have.status(400);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is badRequest\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\n});\n\npm.test(\"Response title is Bad Request\", function () {\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"endTimeAt is mandatory when timerel=between\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{temporalResourceId}}\"\n        }\n    ],\n    \"temporalQ\": {\n        \"timerel\": \"between\",\n        \"timeAt\": \"2021-03-28T21:43:44+05:30\",\n        \"timeproperty\": \"observationDateTime\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entityOperations/query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 - temporalOperations",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\n    pm.response.to.have.status(401);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is notAuthorized\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\n});\n\npm.test(\"Response title is Not Authorized\", function () {\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{temporalResourceId}}\"\n        }\n    ],\n    \"temporalQ\": {\n        \"timerel\": \"between\",\n        \"timeAt\": \"2021-03-28T21:43:44+05:30\",\n        \"timeproperty\": \"observationDateTime\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entityOperations/query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 - temporalOperations",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notFound\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notFound\");\r\n});\r\n\r\npm.test(\"Response title is Not Found\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{nonExistentResourceId}}\"\n        }\n    ],\n    \"temporalQ\": {\n        \"timerel\": \"between\",\n        \"timeAt\": \"2021-03-28T21:43:44+05:30\",\n        \"timeproperty\": \"observationDateTime\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/temporal/entityOperations/query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"temporal",
+										"entityOperations",
+										"query"
+									],
+									"query": [
+										{
+											"key": "offset",
+											"value": "0",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "count",
+											"value": "true",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Latest Data",
+					"item": [
+						{
+							"name": "400 Get Latest data",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\n    pm.response.to.have.status(400);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is badRequest\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\n});\n\npm.test(\"Response title is Bad Request\", function () {\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Invalid path parameter 'id': does not match the required format\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{invalidFormatResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{invalidFormatResourceId}}"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "10",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "between",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-15T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 Get Latest data",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\n    pm.response.to.have.status(401);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is notAuthorized\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\n});\n\npm.test(\"Response title is Not Authorized\", function () {\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{sampleResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{sampleResourceId}}"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "10",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "before",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-15T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "403 Get Latest data",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Content-Type is JSON\", function () {\n    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");\n});\n\npm.test(\"Request method is GET\", function () {\n    pm.expect(pm.request.method).to.eql(\"GET\");\n});\n\npm.test(\"Authorization header is Bearer consumerToken\", function () {\n    pm.expect(pm.request.headers.get(\"Authorization\")).to.eql(\"Bearer \" + pm.environment.get(\"consumerToken\"));\n});\n\nconst statusCode = pm.response.code;\nlet body;\ntry {\n    body = pm.response.json();\n} catch (e) {\n    body = null;\n}\n\nconsole.log(\"Actual status code received:\", statusCode);\n\npm.test(\"NEGATIVE 403: Status is 403\", function () {\n    pm.response.to.have.status(403);\n});\n\npm.test(\"POSITIVE 403: type matches spec exactly\", function () {\n    pm.expect(body.type).to.eql(\"dx:dataplane:no-access\");\n});\n\npm.test(\"POSITIVE 403: title matches one of the spec's documented values\", function () {\n    pm.expect([\"No-access\", \"Forbidden\"]).to.include(body.title);\n});\n\npm.test(\"POSITIVE 403: detail matches one of the spec's documented messages\", function () {\n    const specDetailOptions = [\n        \"Access check failed doc doesn't exist\",\n        \"Access check failed Access denied for restricted item\"\n    ];\n    pm.expect(specDetailOptions).to.include(body.detail);\n});\n\nconsole.log(\"Actual \" + statusCode + \" response:\", JSON.stringify(body, null, 2));\n\npm.test(\"Response time is acceptable\", function () {\n    pm.expect(pm.response.responseTime).to.be.below(3000);\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{restrictedResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{restrictedResourceId}}"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "10",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "before",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-15T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 Get Latest data",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\n    pm.response.to.have.status(404);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is notFound\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notFound\");\n});\n\npm.test(\"Response title is Not Found\", function () {\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{nonExistentResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{nonExistentResourceId}}"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "10",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "before",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-15T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 (success) Get Latest data",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {",
+											"    pm.response.to.have.status(200);",
+											"});",
+											"",
+											"const jsonData = pm.response.json();",
+											"",
+											"pm.test(\"Response type is success\", function () {",
+											"    pm.expect(jsonData.type).to.eql(\"dx:dataplane:success\");",
+											"});",
+											"",
+											"pm.test(\"Response title is Success\", function () {",
+											"    pm.expect(jsonData.title).to.eql(\"Success\");",
+											"});",
+											"",
+											"pm.test(\"Result is an array\", function () {",
+											"    pm.expect(jsonData.result).to.be.an(\"array\");",
+											"});",
+											"",
+											"pm.test(\"Result length matches size param\", function () {",
+											"    const size = parseInt(pm.request.url.query.get(\"size\"));",
+											"    pm.expect(jsonData.result.length).to.eql(size);",
+											"});",
+											"",
+											"pm.test(\"paginationInfo is present and consistent\", function () {",
+											"    pm.expect(jsonData).to.have.property(\"paginationInfo\");",
+											"    const pi = jsonData.paginationInfo;",
+											"    pm.expect(pi.page).to.eql(parseInt(pm.request.url.query.get(\"page\")));",
+											"    pm.expect(pi.size).to.eql(parseInt(pm.request.url.query.get(\"size\")));",
+											"    pm.expect(pi).to.have.property(\"totalCount\");",
+											"    pm.expect(pi).to.have.property(\"hasNext\");",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{sampleResourceId}}?size=10&page=1",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{sampleResourceId}}"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "10"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "timeRel",
+											"value": "before",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-15T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Search Data",
+					"item": [
+						{
+							"name": "400  Post Search",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is badRequest\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\r\n});\r\n\r\npm.test(\"Response title is Bad Request\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"searchType betweenRange on field dataReadiness expects exactly 2 value(s), but got 1\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"betweenRange\",\n            \"field\": \"dataReadiness\",\n            \"values\": [50]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{sampleResourceId}}/search",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{sampleResourceId}}",
+										"search"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "term",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "beforeRange",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "afterRange",
+											"value": "1",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 Post Search",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\r\n    pm.response.to.have.status(401);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notAuthorized\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\r\n});\r\n\r\npm.test(\"Response title is Not Authorized\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"term\",\n            \"field\": \"bank_id\",\n            \"values\": [\"IDBI\"]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{sampleResourceId}}/search",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{sampleResourceId}}",
+										"search"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "term",
+											"value": "1",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "403 Post Search",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 403\", function () {\n    pm.response.to.have.status(403);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is no-access\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:no-access\");\n});\n\npm.test(\"Response title is Forbidden\", function () {\n    pm.expect(jsonData.title).to.eql(\"Forbidden\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Access check failed Access denied for restricted item\");\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"term\",\n            \"field\": \"bank_id\",\n            \"values\": [\"IDBI\"]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{restrictedResourceId}}/search?term=1",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{restrictedResourceId}}",
+										"search"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "term",
+											"value": "1"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 (success) Post Search",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is success\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:success\");\n});\n\npm.test(\"Response title is Success\", function () {\n    pm.expect(jsonData.title).to.eql(\"Success\");\n});\n\npm.test(\"Result is an array\", function () {\n    pm.expect(jsonData.result).to.be.an(\"array\");\n});\n\npm.test(\"Result length matches size param\", function () {\n    const size = parseInt(pm.request.url.query.get(\"size\"));\n    pm.expect(jsonData.result.length).to.eql(size);\n});\n\npm.test(\"Every result matches the search criteria (bank_id = IDBI)\", function () {\n    jsonData.result.forEach(item => {\n        pm.expect(item.bank_id).to.eql(\"IDBI\");\n    });\n});\n\npm.test(\"paginationInfo is present and consistent\", function () {\n    pm.expect(jsonData).to.have.property(\"paginationInfo\");\n    const pi = jsonData.paginationInfo;\n    pm.expect(pi.page).to.eql(parseInt(pm.request.url.query.get(\"page\")));\n    pm.expect(pi.size).to.eql(parseInt(pm.request.url.query.get(\"size\")));\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"term\",\n            \"field\": \"bank_id\",\n            \"values\": [\"IDBI\"]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/entities/{{sampleResourceId}}/search?size=1&page=1",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"entities",
+										"{{sampleResourceId}}",
+										"search"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "1"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "term",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "beforeRange",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "afterRange",
+											"value": "1",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Download Data",
+					"item": [
+						{
+							"name": "400 Download",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\n    pm.response.to.have.status(400);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is badRequest\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\n});\n\npm.test(\"Response title is Bad Request\", function () {\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Invalid path parameter 'id': does not match the required format\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"beforeTemporal\",\n            \"field\": \"observationDateTime\",\n            \"values\": [\"2026-05-02T09:15:27+05:30\"\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{invalidFormatResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{invalidFormatResourceId}}",
+										"download"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "during",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-18T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 Download",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\n    pm.response.to.have.status(401);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is notAuthorized\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\n});\n\npm.test(\"Response title is Not Authorized\", function () {\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"beforeTemporal\",\n            \"field\": \"observationDateTime\",\n            \"values\": [\"2026-05-02T09:15:27+0530\"]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{sampleResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{sampleResourceId}}",
+										"download"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "during",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-18T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "403 Download",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 403\", function () {\n    pm.response.to.have.status(403);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is no-access\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:no-access\");\n});\n\npm.test(\"Response title is Forbidden\", function () {\n    pm.expect(jsonData.title).to.eql(\"Forbidden\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Access check failed Access denied for restricted item\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"beforeTemporal\",\n            \"field\": \"observationDateTime\",\n            \"values\": [\"2026-05-02T09:15:27+0530\"]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{restrictedResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{restrictedResourceId}}",
+										"download"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "during",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-18T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 Download",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\n    pm.response.to.have.status(404);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is notFound\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notFound\");\n});\n\npm.test(\"Response title is Not Found\", function () {\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"beforeTemporal\",\n            \"field\": \"observationDateTime\",\n            \"values\": [\"2026-05-02T09:15:27+0530\"]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{nonExistentResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{nonExistentResourceId}}",
+										"download"
+									],
+									"query": [
+										{
+											"key": "size",
+											"value": "2",
+											"disabled": true
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "timeRel",
+											"value": "during",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2020-11-18T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2020-12-28T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 (success) Download",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\npm.test(\"Content-Type is CSV\", function () {\n    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"csv\");\n});\n\nconst lines = pm.response.text().split(\"\\n\");\n\npm.test(\"Response has a header row and at least one data row\", function () {\n    pm.expect(lines.length).to.be.above(1);\n});\n\npm.test(\"Header row contains expected columns\", function () {\n    const header = lines[0];\n    pm.expect(header).to.include(\"bank_id\");\n});\n\npm.test(\"All data rows match the bank_id filter\", function () {\n    for (let i = 1; i < lines.length - 1; i++) {\n        if (lines[i].trim() === \"\") continue;\n        pm.expect(lines[i]).to.include(\"IDBI\");\n    }\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "// {\n//     \"searchCriteria\": [\n//         {\n//             \"searchType\": \"beforeTemporal\",\n//             \"field\": \"observationDateTime\",\n//             \"values\": [\"2026-05-02T09:15:27+05:30\"]\n//         }\n//     ]\n// }\n{\n    \"searchCriteria\": [\n        {\n            \"searchType\": \"term\",\n            \"field\": \"bank_id\",\n            \"values\": [\"IDBI\"]\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{entitiesResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{entitiesResourceId}}",
+										"download"
+									],
+									"query": [
+										{
+											"key": "timeRel",
+											"value": "during",
+											"disabled": true
+										},
+										{
+											"key": "time",
+											"value": "2021-03-28T14:20:00Z",
+											"disabled": true
+										},
+										{
+											"key": "endTime",
+											"value": "2021-03-29T14:20:00Z",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "400 GET DOWNLOAD",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is badRequest\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:badRequest\");\r\n});\r\n\r\npm.test(\"Response title is Bad Request\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Invalid path parameter 'id': does not match the required format\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{invalidFormatResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{invalidFormatResourceId}}",
+										"download"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 GET DOWNLOAD",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\n    pm.response.to.have.status(401);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is notAuthorized\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notAuthorized\");\n});\n\npm.test(\"Response title is Not Authorized\", function () {\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{sampleResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{sampleResourceId}}",
+										"download"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "403 GET DOWNLOAD",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 403\", function () {\r\n    pm.response.to.have.status(403);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is no-access\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:no-access\");\r\n});\r\n\r\npm.test(\"Response title is Forbidden\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Forbidden\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Access check failed Access denied for restricted item\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{restrictedResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{restrictedResourceId}}",
+										"download"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 GET DOWNLOAD",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is notFound\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplane:notFound\");\r\n});\r\n\r\npm.test(\"Response title is Not Found\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\r\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{nonExistentResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{nonExistentResourceId}}",
+										"download"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "200 (success) GET DOWNLOAD",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\npm.test(\"Content-Type is CSV\", function () {\r\n    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"csv\");\r\n});\r\n\r\nconst lines = pm.response.text().split(\"\\n\");\r\n\r\npm.test(\"Response has a header row and at least one data row\", function () {\r\n    pm.expect(lines.length).to.be.above(1);\r\n});\r\n\r\npm.test(\"Header row contains expected columns\", function () {\r\n    const header = lines[0];\r\n    pm.expect(header).to.include(\"id\");\r\n    pm.expect(header).to.include(\"observationDateTime\");\r\n});\r\n\r\npm.test(\"First data row contains the requested resource id\", function () {\r\n    const expectedId = pm.environment.get(\"temporalResourceId\");\r\n    pm.expect(lines[1]).to.include(expectedId);\r\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePath}}/{{temporalResourceId}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePath}}",
+										"{{temporalResourceId}}",
+										"download"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Using Appid",
+					"item": [
+						{
+							"name": "01 — Entities GET",
+							"request": {
+								"auth": {
+									"type": "basic",
+									"basic": [
+										{
+											"key": "username",
+											"value": "{{appidusername}}",
+											"type": "string"
+										},
+										{
+											"key": "password",
+											"value": "{{appidusernamepass}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Basic {{app_id}}:{{app_secret}}",
+										"disabled": true
+									},
+									{
+										"key": "did",
+										"value": "1dc28cc6-d614-461a-9b8f-d6110feb3e2f",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/{{basePathV1}}/entities?id={{temporalResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "id",
+											"value": "{{temporalResourceId}}"
+										}
+									]
+								},
+								"description": "Temporal search using AppId Basic Auth.\n\n**Required params:** `id`, `timerel`, `timeAt` (and `endTimeAt` for `between`)\n\n**Supported timerel values:** `between`, `before`, `after`\n\n```bash\ncurl -k -X GET '{{DATAPLANE_NGSILD_HOST}}/ngsi-ld/v1/temporal/entities?id={{ENTITY_ID}}&timerel=between&timeAt=2024-01-01T00:00:00Z&endTimeAt=2024-01-31T23:59:59Z&limit=10' \\\n  -H 'Authorization: Basic '\"$(echo -n \"$APP_ID:$APP_SECRET\" | base64)\"\n```"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "GATEWAY SERVER",
+			"item": [
+				{
+					"name": "EntitiesSearch",
+					"item": [
+						{
+							"name": "200 (success) - Simple Attr search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is dataplaneProxy success\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:success\");\r\n});\r\n\r\npm.test(\"Response title is Success\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Success\");\r\n});\r\n\r\npm.test(\"Result is an array\", function () {\r\n    pm.expect(jsonData.result).to.be.an(\"array\");\r\n});\r\n\r\npm.test(\"Result is not empty\", function () {\r\n    pm.expect(jsonData.result.length).to.be.above(0);\r\n});\r\n\r\npm.test(\"Every result matches the search criteria (District = PUNE)\", function () {\r\n    jsonData.result.forEach(item => {\r\n        pm.expect(item.District.toUpperCase()).to.eql(\"PUNE\");\r\n    });\r\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entities?id={{gatewayResourceId}}&q=District==PUNE",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "id",
+											"value": "{{gatewayResourceId}}"
+										},
+										{
+											"key": "q",
+											"value": "District==PUNE"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "400 (success) - Simple Attr search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is dataplaneProxy badRequest\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:badRequest\");\r\n});\r\n\r\npm.test(\"Response title is Bad Request\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Missing required query parameter 'id'\");\r\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entities",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entities"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 (success) - Simple Attr search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\r\n    pm.response.to.have.status(401);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is dataplaneProxy notAuthorized\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:notAuthorized\");\r\n});\r\n\r\npm.test(\"Response title is Not Authorized\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\r\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entities?id={{gatewayResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "id",
+											"value": "{{gatewayResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 (success) - Simple Attr search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is dataplaneProxy notFound\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:notFound\");\r\n});\r\n\r\npm.test(\"Response title is Not Found\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\r\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entities?id={{gatewayNonExistentResourceId}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entities"
+									],
+									"query": [
+										{
+											"key": "id",
+											"value": "{{gatewayNonExistentResourceId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Complex Search",
+					"item": [
+						{
+							"name": "200 (success) - Attribute Search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 200\", function () {\n    pm.response.to.have.status(200);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is dataplaneProxy success\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:success\");\n});\n\npm.test(\"Response title is Success\", function () {\n    pm.expect(jsonData.title).to.eql(\"Success\");\n});\n\npm.test(\"Result is an array\", function () {\n    pm.expect(jsonData.result).to.be.an(\"array\");\n});\n\npm.test(\"Result is not empty\", function () {\n    pm.expect(jsonData.result.length).to.be.above(0);\n});\n\npm.test(\"Every result matches the search criteria (District = PUNE)\", function () {\n    jsonData.result.forEach(item => {\n        pm.expect(item.District.toUpperCase()).to.eql(\"PUNE\");\n    });\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"type\": \"Query\",\r\n    \"entities\": [\r\n        {\r\n            \"id\": \"{{gatewayResourceId}}\"\r\n        }\r\n    ],\r\n    \"q\": \"District==PUNE\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entityOperations/query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "400 (success) - Attribute Search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 400\", function () {\n    pm.response.to.have.status(400);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is dataplaneProxy badRequest\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:badRequest\");\n});\n\npm.test(\"Response title is Bad Request\", function () {\n    pm.expect(jsonData.title).to.eql(\"Bad Request\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"Spatial parameters are not supported by RS Item.\");\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        { \"id\": \"{{gatewayResourceId}}\" }\n    ],\n    \"geoQ\": {\n        \"geometry\": \"Point\",\n        \"coordinates\": [72.85, 19.06],\n        \"georel\": \"near;maxDistance=1000\",\n        \"geoproperty\": \"location\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entityOperations/query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "401 (success) - Attribute Search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 401\", function () {\r\n    pm.response.to.have.status(401);\r\n});\r\n\r\nconst jsonData = pm.response.json();\r\n\r\npm.test(\"Response type is dataplaneProxy notAuthorized\", function () {\r\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:notAuthorized\");\r\n});\r\n\r\npm.test(\"Response title is Not Authorized\", function () {\r\n    pm.expect(jsonData.title).to.eql(\"Not Authorized\");\r\n});\r\n\r\npm.test(\"Response detail matches expected message\", function () {\r\n    pm.expect(jsonData.detail).to.eql(\"Missing credentials\");\r\n});"
+										]
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											""
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        {\n            \"id\": \"{{gatewayResourceId}}\"\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entityOperations/query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "404 (success) - Attribute Search V1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Status code is 404\", function () {\n    pm.response.to.have.status(404);\n});\n\nconst jsonData = pm.response.json();\n\npm.test(\"Response type is dataplaneProxy notFound\", function () {\n    pm.expect(jsonData.type).to.eql(\"dx:dataplaneProxy:notFound\");\n});\n\npm.test(\"Response title is Not Found\", function () {\n    pm.expect(jsonData.title).to.eql(\"Not Found\");\n});\n\npm.test(\"Response detail matches expected message\", function () {\n    pm.expect(jsonData.detail).to.eql(\"doc doesn't exist\");\n});"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{consumerToken}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"Query\",\n    \"entities\": [\n        { \"id\": \"{{gatewayNonExistentResourceId}}\" }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/rsp/{{basePathV1}}/entityOperations/query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rsp",
+										"{{basePathV1}}",
+										"entityOperations",
+										"query"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "auth_password_1dsa"
+		},
+		{
+			"key": "consumerToken",
+			"value": ""
+		},
+		{
+			"key": "app_id",
+			"value": ""
+		},
+		{
+			"key": "app_secret",
+			"value": ""
+		}
+	]
+}

@@ -43,46 +43,7 @@
     "password": "${PG_PASS:-}",
     "sslmode": "require",
     "connect_timeout_seconds": 10,
-    "user_tables": [
-      {
-        "table": "organization_users",
-        "column": "user_id"
-      },
-      {
-        "table": "organization_join_requests",
-        "column": "user_id"
-      },
-      {
-        "table": "provider_requests",
-        "column": "user_id"
-      },
-      {
-        "table": "organization_create_requests",
-        "column": "requested_by"
-      },
-      {
-        "table": "compute_role",
-        "column": "user_id"
-      }
-    ],
-    "org_tables": [
-      {
-        "table": "provider_requests",
-        "column": "organization_id"
-      },
-      {
-        "table": "organization_join_requests",
-        "column": "organization_id"
-      },
-      {
-        "table": "organization_users",
-        "column": "organization_id"
-      },
-      {
-        "table": "organizations",
-        "column": "id"
-      }
-    ]
+    "audit_rows": false
   },
   "endpoints": {
     "kc_token": "/realms/{realm}/protocol/openid-connect/token",

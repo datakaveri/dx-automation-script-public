@@ -1,0 +1,30 @@
+{
+  "kibana": {
+    "host": "https://<kibana-host>",
+    "username": "<kibana-username>",
+    "password": "${KIBANA_PASS:-}",
+    "timeout_seconds": 60,
+    "verify_tls": true
+  },
+  "index_prefix": "iudx-v2__",
+  "target": {
+    "item_ids": [
+      "<item-id>"
+    ],
+    "index_names": []
+  },
+  "postgres": {
+    "enabled": false,
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "<database>",
+    "schema": "aaa",
+    "user": "<db-user>",
+    "password": "${PG_PASS:-}",
+    "sslmode": "prefer",
+    "prefix": "e2e-"
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "control_plane": {
+    "base_url": "https://<controlplane-host>",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "user_client_id": "postman-client",
+    "user_client_secret": "",
+    "admin_client_id": "",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "target": {
+    "username": "",
+    "password": "${CONSUMER_PASS:-}",
+    "user_id": "",
+    "token": "",
+    "input_file": "",
+    "require_input_file": false
+  },
+  "actors": {
+    "cos_admin": {
+      "username": "",
+      "password": "${COS_ADMIN_PASS:-}",
+      "token": ""
+    }
+  },
+  "clean": {
+    "zero_balance": true,
+    "credit_requests": true,
+    "compute_requests": true,
+    "compute_via_database": true,
+    "sweep_credit_rows": true,
+    "revoke_compute_role": false,
+    "compute_role_name": "compute",
+    "clear_kyc_attribute": false,
+    "kyc_attribute": "kyc_verified",
+    "delete_user": false,
+    "requested_at": "",
+    "deduct_retries": 2,
+    "list_page_start": 1,
+    "list_page_size": 50,
+    "list_max_pages": 20,
+    "verify": true
+  },
+  "postgres": {
+    "host": "",
+    "port": 5432,
+    "database": "",
+    "schema": "aaa",
+    "user": "",
+    "password": "",
+    "sslmode": "require",
+    "connect_timeout_seconds": 10
+  },
+  "endpoints": {
+    "kc_token": "/realms/{realm}/protocol/openid-connect/token",
+    "kc_users": "/admin/realms/{realm}/users",
+    "kc_user": "/admin/realms/{realm}/users/{user_id}",
+    "kc_realm_role": "/admin/realms/{realm}/roles/{role}",
+    "kc_role_mappings": "/admin/realms/{realm}/users/{user_id}/role-mappings/realm",
+    "cp_user_info": "/iudx/v2/auth/user",
+    "cp_own_credit_balance": "/iudx/v2/auth/user/credit/balance",
+    "cp_admin_credit_balance": "/iudx/v2/auth/admin/user/credit/balance/{user_id}",
+    "cp_admin_credit_deduct": "/iudx/v2/auth/admin/user/credit/deduct",
+    "cp_own_credit_requests": "/iudx/v2/auth/user/credit/request",
+    "cp_credit_request": "/iudx/v2/auth/user/credit/request/{req_id}",
+    "cp_own_compute_requests": "/iudx/v2/auth/user/compute/requests",
+    "cp_compute_request": "/iudx/v2/auth/user/compute/requests/{req_id}",
+    "cp_user_delete": "/iudx/v2/auth/user/delete"
+  },
+  "logging": {
+    "level": "INFO",
+    "print_responses": false,
+    "response_preview_chars": 1000
+  }
+}

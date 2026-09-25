@@ -1,0 +1,45 @@
+{
+  "control_plane": {
+    "base_url": "https://<controlplane-host>",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "user_client_id": "postman-client",
+    "user_client_secret": "",
+    "timeout_seconds": 30,
+    "verify_tls": true,
+    "admin_client_id": "",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}"
+  },
+  "actor": {
+    "username": "<org-admin-or-cos-admin-username>",
+    "password": "${ACTOR_PASS:-}",
+    "token": ""
+  },
+  "postgres": {
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "<database>",
+    "schema": "aaa",
+    "user": "<db-user>",
+    "password": "${PG_PASS:-}",
+    "sslmode": "prefer",
+    "connect_timeout_seconds": 10
+  },
+  "target": {
+    "org_ids": [],
+    "request_ids": []
+  },
+  "delete": {
+    "mode": "auto",
+    "verify": true,
+    "audit_rows": false,
+    "detach_keycloak_users": true
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

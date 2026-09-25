@@ -1,0 +1,2420 @@
+{
+	"info": {
+		"_postman_id": "a01d1705-0522-4bfd-95f4-b897b3687974",
+		"name": "DX ControlPlane - Onboarding E2E Copy",
+		"description": "End-to-end onboarding flow for the DX Control Plane, in the order the requests appear.\n\n1. **Sign in** - password-grant logins for the requester, the COS Admin and the consumer.\n2. **Organisation onboarding** - the requester submits an organisation create request; the\n   COS Admin lists the pending queue and approves it; the requester refreshes their token to\n   pick up the newly granted `org_admin` + `provider` roles and the `organisation_id` claim.\n3. **Catalogue** - the new org admin publishes an asset.\n4. **Access request** - the consumer requests access; the org admin approves it, creating an\n   active policy; the consumer verifies the access.\n5. **Auditing** - reads all of the above back through the activity API to prove each write was\n   audited.\n6. **Teardown** - deletes the policy and then the asset.\n\nIds are chained automatically through collection variables (`org_request_id`, `org_id`,\n`item_id`, `access_request_id`, `policy_id`) - run the folders top to bottom in the Collection\nRunner and nothing needs to be pasted by hand.\n\n**Auditing (folder 04)** is checked *once, at the end* rather than after every request. Audit\nrows are published to RabbitMQ from `addBodyEndHandler` - after the response has been written -\nand inserted by a downstream consumer, so reading the activity API immediately after a write\nraces that consumer; and since the API is filterable and paginated, one call per actor covers\nthe whole trail. There is more than one call only because visibility is role-scoped: a consumer\nsees just their own rows, an org admin their organisation's, a COS Admin everything. Each check\nre-sends itself until the row appears (`audit_retry_max` x `audit_retry_delay_ms`), which needs\nthe Collection Runner or Newman - `setNextRequest` does nothing on a single send.\n\n**Teardown (folder 05)** has a required order: `DELETE /cat/item` refuses with 409 while any\nACTIVE policy references the item, so the policy is soft-deleted first. The 409 is asserted\nrather than avoided, so the guard is covered too.\n\n**Configuration** lives entirely in the environment - the collection itself contains no host,\ncredential or payload literal, so the same collection runs unchanged against every\ndeployment. Two environments ship with it:\n\n- `env-onboarding-local` - working values for the docker-compose stack.\n- `env-onboarding-template` - duplicate this once per deployment and fill the twelve\n  `<angle-bracket>` placeholders. Everything without a placeholder already has a usable\n  default and only needs touching if you want different fixture data.\n\nOnly these twelve are deployment-specific: `base_url`, `acl_url`, `kc_url`, `realm`,\n`client_id`, `client_secret`, and the three username/password pairs. On a deployed\nenvironment the control plane and the ACL/APD API sit behind the *same* host and differ only\nby path, so `base_url` and `acl_url` are usually identical - they are split only because the\nlocal stack exposes them on ports 8080 and 8444. Leave `client_secret` empty for a public\nclient; if the client is confidential, fill it in and enable the disabled `client_secret`\nrow in the body of each login request.\n\n**Re-running:** a user may hold only one pending or granted org create request, and the org\nname and manager e-mail must be unique platform-wide. `unique_run_suffix=true` appends a\ntimestamp to the org name, manager e-mail and item name so repeated runs do not collide - but\nfolder 01 still needs a *fresh* `requester_user` each time. Set `unique_run_suffix=false` to\nsend the literal values from the environment.\n\n**Prerequisites**\n\n- `requester_user` is a *fresh* Keycloak user with a password, no organisation and no\n  `org_admin` role. The seeded `orgadmin` user in `dev/keycloak/realm-iudx.json` already has\n  that role, so it cannot drive this flow - create a new one.\n- `consumer_user` holds the `consumer` role (the seeded `consumer1` does).\n- The client named by `client_id` has direct access grants enabled (`postman-client` does).\n- KYC: the org-create and join routes are guarded by `kycVerification(kycRequired)`. The\n  config flag `kycRequired` is `false` in the example and dev configs; if you turn it on, the\n  requester must be KYC verified first.\n- The dev realm ships without protocol mappers, so `organisation_id` is not in the token. The\n  \"Refresh requester token\" test therefore only asserts the roles, and `org_id` is picked up\n  by the \"Confirm org membership\" request that follows it. Add a user-attribute mapper for\n  `organisation_id` if you want the claim in the token as well.\n",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "40890361"
+	},
+	"item": [
+		{
+			"name": "00 - Sign in",
+			"item": [
+				{
+					"name": "Login - Requester (becomes Org Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test(\"access_token returned\", function () {",
+									"    pm.expect(json).to.have.property(\"access_token\");",
+									"});",
+									"pm.collectionVariables.set(\"requester_token\", json.access_token);",
+									"pm.collectionVariables.set(\"requester_refresh_token\", json.refresh_token);",
+									"",
+									"// `sub` is the user id the audit log records - folder 04 filters activity by it.",
+									"const claims = JSON.parse(atob(json.access_token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\")));",
+									"pm.collectionVariables.set(\"requester_user_id\", claims.sub);",
+									"console.log(\"[requester] token stored, sub=\" + claims.sub);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "password"
+								},
+								{
+									"key": "client_id",
+									"value": "{{client_id}}"
+								},
+								{
+									"key": "username",
+									"value": "{{requester_user}}"
+								},
+								{
+									"key": "password",
+									"value": "{{requester_pass}}"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{kc_url}}/realms/{{realm}}/protocol/openid-connect/token",
+							"host": [
+								"{{kc_url}}"
+							],
+							"path": [
+								"realms",
+								"{{realm}}",
+								"protocol",
+								"openid-connect",
+								"token"
+							]
+						},
+						"description": "The user who will submit the organisation creation request. After COS Admin approval this same user is granted `org_admin` + `provider` in Keycloak."
+					},
+					"response": []
+				},
+				{
+					"name": "Login - COS Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test(\"access_token returned\", function () {",
+									"    pm.expect(json).to.have.property(\"access_token\");",
+									"});",
+									"pm.collectionVariables.set(\"cosadmin_token\", json.access_token);",
+									"pm.collectionVariables.set(\"cosadmin_refresh_token\", json.refresh_token);",
+									"",
+									"// `sub` is the user id the audit log records - folder 04 filters activity by it.",
+									"const claims = JSON.parse(atob(json.access_token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\")));",
+									"pm.collectionVariables.set(\"cosadmin_user_id\", claims.sub);",
+									"console.log(\"[cosadmin] token stored, sub=\" + claims.sub);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "password"
+								},
+								{
+									"key": "client_id",
+									"value": "{{client_id}}"
+								},
+								{
+									"key": "username",
+									"value": "{{cosadmin_user}}"
+								},
+								{
+									"key": "password",
+									"value": "{{cosadmin_pass}}"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{kc_url}}/realms/{{realm}}/protocol/openid-connect/token",
+							"host": [
+								"{{kc_url}}"
+							],
+							"path": [
+								"realms",
+								"{{realm}}",
+								"protocol",
+								"openid-connect",
+								"token"
+							]
+						},
+						"description": "Platform administrator. Only this role can list and approve organisation creation requests."
+					},
+					"response": []
+				},
+				{
+					"name": "Login - Consumer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test(\"access_token returned\", function () {",
+									"    pm.expect(json).to.have.property(\"access_token\");",
+									"});",
+									"pm.collectionVariables.set(\"consumer_token\", json.access_token);",
+									"pm.collectionVariables.set(\"consumer_refresh_token\", json.refresh_token);",
+									"",
+									"// `sub` is the user id the audit log records - folder 04 filters activity by it.",
+									"const claims = JSON.parse(atob(json.access_token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\")));",
+									"pm.collectionVariables.set(\"consumer_user_id\", claims.sub);",
+									"console.log(\"[consumer] token stored, sub=\" + claims.sub);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "password"
+								},
+								{
+									"key": "client_id",
+									"value": "{{client_id}}"
+								},
+								{
+									"key": "username",
+									"value": "{{consumer_user}}"
+								},
+								{
+									"key": "password",
+									"value": "{{consumer_pass}}"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{kc_url}}/realms/{{realm}}/protocol/openid-connect/token",
+							"host": [
+								"{{kc_url}}"
+							],
+							"path": [
+								"realms",
+								"{{realm}}",
+								"protocol",
+								"openid-connect",
+								"token"
+							]
+						},
+						"description": "The data consumer who will raise the access request against the published item."
+					},
+					"response": []
+				}
+			],
+			"description": "Password-grant logins for the three actors in the flow. Every credential, the Keycloak URL, realm and client are environment variables."
+		},
+		{
+			"name": "01 - Organisation onboarding",
+			"item": [
+				{
+					"name": "Submit organisation create request (Requester)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Organisation name and manager e-mail must be unique across the platform,",
+									"// and a user may hold only one pending/granted create request. Set",
+									"// `unique_run_suffix` to \"false\" in the environment to use the raw values.",
+									"const unique = String(pm.environment.get(\"unique_run_suffix\") || \"true\") === \"true\";",
+									"const suffix = unique ? \"-\" + Date.now() : \"\";",
+									"",
+									"pm.collectionVariables.set(\"org_name\", pm.environment.get(\"org_name_prefix\") + suffix);",
+									"pm.collectionVariables.set(",
+									"    \"org_manager_email\",",
+									"    pm.environment.get(\"org_manager_email_local\") + suffix + \"@\" + pm.environment.get(\"org_manager_email_domain\")",
+									");",
+									"console.log(\"[org] name=\" + pm.collectionVariables.get(\"org_name\"));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const result = pm.response.json().result || pm.response.json().results || {};",
+									"pm.test(\"request id returned\", function () {",
+									"    pm.expect(result).to.have.property(\"id\");",
+									"});",
+									"pm.collectionVariables.set(\"org_request_id\", result.id);",
+									"// Only overwrite the id taken from the token when the response actually carries one.",
+									"if (result.requestedBy) {",
+									"    pm.collectionVariables.set(\"requester_user_id\", result.requestedBy);",
+									"}",
+									"console.log(\"[org] request id=\" + result.id + \" status=\" + result.status);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{org_name}}\",\n  \"entity_type\": \"{{org_entity_type}}\",\n  \"org_sector\": \"{{org_sector}}\",\n  \"website_link\": \"{{org_website_link}}\",\n  \"address\": \"{{org_address}}\",\n  \"certificate_path\": \"{{org_certificate_path}}\",\n  \"pancard_path\": \"{{org_pancard_path}}\",\n  \"relevant_doc_path\": \"{{org_relevant_doc_path}}\",\n  \"organisation_documents\": \"{{org_documents_path}}\",\n  \"logo_path\": \"{{org_logo_path}}\",\n  \"emp_id\": \"{{org_emp_id}}\",\n  \"job_title\": \"{{org_job_title}}\",\n  \"phone_no\": \"{{org_phone_no}}\",\n  \"manager_email\": \"{{org_manager_email}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auth/organisations/requests",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auth",
+								"organisations",
+								"requests"
+							]
+						},
+						"description": "Required fields: name, entity_type, org_sector, website_link, address, certificate_path, pancard_path, emp_id, job_title, manager_email, organisation_documents. `requested_by` and `user_name` are taken from the token. Rejected with 409 if the caller already has a pending/granted request, or if the org name / manager e-mail is already taken. The caller must be KYC verified."
+					},
+					"response": []
+				},
+				{
+					"name": "List pending org requests (COS Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const body = pm.response.json();",
+									"const rows = body.result || body.results || [];",
+									"const wanted = pm.collectionVariables.get(\"org_name\");",
+									"const match = rows.find(function (r) { return r.name === wanted; });",
+									"",
+									"pm.test(\"submitted request is visible to COS Admin\", function () {",
+									"    pm.expect(match, \"no pending request named \" + wanted).to.be.an(\"object\");",
+									"});",
+									"",
+									"if (match) {",
+									"    // authoritative id, in case the create step was run separately",
+									"    pm.collectionVariables.set(\"org_request_id\", match.id);",
+									"    console.log(\"[org] pending request \" + match.id + \" by \" + match.userName);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{cosadmin_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auth/organisations/requests?status={{org_request_status_filter}}&page={{page}}&size={{size}}&sort={{sort}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auth",
+								"organisations",
+								"requests"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "{{org_request_status_filter}}"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{size}}"
+								},
+								{
+									"key": "sort",
+									"value": "{{sort}}"
+								}
+							]
+						},
+						"description": "COS Admin only. Locates the request submitted above by organisation name and re-saves `org_request_id`, so the approval step below works even when run on its own."
+					},
+					"response": []
+				},
+				{
+					"name": "Approve org create request (COS Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"approval acknowledged\", function () {",
+									"    pm.expect(pm.response.json().type).to.include(\"success\");",
+									"});",
+									"console.log(\"[org] \" + JSON.stringify(pm.response.json()));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{cosadmin_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"req_id\": \"{{org_request_id}}\",\n  \"status\": \"{{org_request_decision}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auth/organisations/requests/approve",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auth",
+								"organisations",
+								"requests",
+								"approve"
+							]
+						},
+						"description": "Set `org_request_decision` to `granted` or `rejected`. On `granted` the server creates the organisation, inserts the requester as its admin, adds the ORG_ADMIN and PROVIDER realm roles and sets the org attributes on the Keycloak user."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh requester token (picks up new roles)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.collectionVariables.set(\"requester_token\", json.access_token);",
+									"pm.collectionVariables.set(\"requester_refresh_token\", json.refresh_token);",
+									"",
+									"// Decode the fresh access token: approval added the org roles and the org claim.",
+									"const claims = JSON.parse(atob(json.access_token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\")));",
+									"const roles = (claims.realm_access && claims.realm_access.roles) || [];",
+									"console.log(\"[token] roles=\" + roles.join(\",\") + \" organisation_id=\" + claims.organisation_id);",
+									"",
+									"pm.test(\"token now carries the org_admin role\", function () {",
+									"    pm.expect(roles).to.include(\"org_admin\");",
+									"});",
+									"pm.test(\"token now carries the provider role\", function () {",
+									"    pm.expect(roles).to.include(\"provider\");",
+									"});",
+									"",
+									"if (claims.organisation_id) {",
+									"    pm.collectionVariables.set(\"org_id\", claims.organisation_id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "refresh_token"
+								},
+								{
+									"key": "client_id",
+									"value": "{{client_id}}"
+								},
+								{
+									"key": "refresh_token",
+									"value": "{{requester_refresh_token}}"
+								},
+								{
+									"key": "client_secret",
+									"value": "{{client_secret}}",
+									"disabled": true
+								}
+							]
+						},
+						"url": {
+							"raw": "{{kc_url}}/realms/{{realm}}/protocol/openid-connect/token",
+							"host": [
+								"{{kc_url}}"
+							],
+							"path": [
+								"realms",
+								"{{realm}}",
+								"protocol",
+								"openid-connect",
+								"token"
+							]
+						},
+						"description": "Keycloak re-evaluates roles on refresh, so the new access token carries `org_admin`, `provider` and the `organisation_id` claim. The old token keeps the pre-approval roles until it expires."
+					},
+					"response": []
+				},
+				{
+					"name": "Confirm org membership (Requester)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const result = pm.response.json().result || {};",
+									"pm.test(\"profile reports an organisation\", function () {",
+									"    pm.expect(result.organisationId, \"organisationId missing from profile\").to.be.a(\"string\");",
+									"});",
+									"",
+									"if (result.organisationId) {",
+									"    pm.collectionVariables.set(\"org_id\", result.organisationId);",
+									"}",
+									"console.log(\"[org] id=\" + result.organisationId + \" name=\" + result.organisationName);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auth/user",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auth",
+								"user"
+							]
+						},
+						"description": "Reads the profile with the refreshed token and stores `org_id` from `result.organisationId`. Also a fallback when the realm does not map the `organisation_id` claim into the token."
+					},
+					"response": []
+				}
+			],
+			"description": "Requester submits the organisation creation request, COS Admin sees it in the pending queue and approves it. Approval creates the organisation, makes the requester its admin, and grants `org_admin` + `provider` in Keycloak - which is why the token has to be refreshed afterwards."
+		},
+		{
+			"name": "02 - Catalogue",
+			"item": [
+				{
+					"name": "Create catalogue item (Org Admin / Provider)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const unique = String(pm.environment.get(\"unique_run_suffix\") || \"true\") === \"true\";",
+									"const suffix = unique ? \"-\" + Date.now() : \"\";",
+									"pm.collectionVariables.set(\"item_name\", pm.environment.get(\"item_name_prefix\") + suffix);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const result = pm.response.json().result || pm.response.json().results || {};",
+									"const id = result.itemId || result.id;",
+									"",
+									"pm.test(\"item id returned\", function () {",
+									"    pm.expect(id, \"no itemId in response\").to.be.a(\"string\");",
+									"});",
+									"",
+									"pm.collectionVariables.set(\"item_id\", id);",
+									"console.log(\"[cat] item \" + id + \" (\" + (result.itemName || \"\") + \")\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"@context\": \"{{item_context}}\",\n  \"type\": [\n    \"{{item_type}}\"\n  ],\n  \"name\": \"{{item_name}}\",\n  \"label\": \"{{item_label}}\",\n  \"shortDescription\": \"{{item_short_description}}\",\n  \"description\": \"{{item_description}}\",\n  \"tags\": {{item_tags}},\n  \"organizationId\": \"{{org_id}}\",\n  \"apdURL\": \"{{apdURL}}\",\n  \"mediaURL\": \"{{item_media_url}}\",\n  \"organizationType\": \"{{item_organization_type}}\",\n  \"accessPolicy\": \"{{item_access_policy}}\",\n  \"resourceType\": \"{{item_resource_type}}\",\n  \"fileFormat\": \"{{item_file_format}}\",\n  \"industry\": \"{{item_industry}}\",\n  \"department\": \"{{item_department}}\",\n  \"geoCoverage\": \"{{item_geo_coverage}}\",\n  \"yearRange\": \"{{item_year_range}}\",\n  \"uploadFrequency\": \"{{item_upload_frequency}}\",\n  \"verifiedBy\": \"{{item_verified_by}}\",\n  \"license\": \"{{item_license}}\",\n  \"dataReadiness\": {{item_data_readiness}},\n  \"resourceServer\": [\n    {\n      \"name\": \"{{item_resource_server_name}}\",\n      \"type\": \"{{item_resource_server_type}}\",\n      \"datasetType\": \"{{item_dataset_type}}\",\n      \"queryTypes\": {{item_query_types}},\n      \"accessTypes\": {{item_access_types}}\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/cat/item",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"cat",
+								"item"
+							]
+						},
+						"description": "`ownerUserId`, `department`, `uploadedBy` and `organizationId` are filled from the token when omitted. Because the caller has `org_admin`, `itemStatus` is set to VERIFIED; `publishStatus` stays PENDING unless the caller is a COS Admin. Use `item_access_policy` = RESTRICTED so the asset actually requires an access request."
+					},
+					"response": []
+				},
+				{
+					"name": "Get catalogue item",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// The catalogue indexes asynchronously, so the item this run just created",
+									"// is briefly not searchable. Every attempt after the first waits before",
+									"// re-reading.",
+									"const attempt = Number(pm.collectionVariables.get(\"cat_get_attempt\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"cat_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const KEY = \"cat_get_attempt\";",
+									"const maxAttempts = Number(pm.environment.get(\"cat_retry_max\") || 8);",
+									"const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"const found = pm.response.code === 200 || pm.response.code === 201;",
+									"",
+									"if (!found && attempt < maxAttempts) {",
+									"    console.log(\"[cat] not indexed yet, attempt \" + attempt + \"/\" + maxAttempts);",
+									"    if (pm.execution && pm.execution.setNextRequest) {",
+									"        pm.execution.setNextRequest(pm.info.requestName);",
+									"    } else {",
+									"        postman.setNextRequest(pm.info.requestName);",
+									"    }",
+									"} else {",
+									"    pm.collectionVariables.set(KEY, 0);",
+									"    pm.test(\"HTTP 2xx\", function () {",
+									"        pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"    });",
+									"    pm.test(\"the item this run created is the one returned\", function () {",
+									"        pm.expect(pm.response.text()).to.include(pm.collectionVariables.get(\"item_id\"));",
+									"    });",
+									"    console.log(\"[cat] found after \" + attempt + \" attempt(s): \" +",
+									"                pm.response.text().slice(0, 300));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/cat/item?id={{item_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"cat",
+								"item"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "{{item_id}}"
+								}
+							]
+						},
+						"description": "Read the asset back. The catalogue indexes asynchronously — a search only sees a document after the index refreshes — so a read fired straight after the create that produced it can answer 404 for a second or two. Retried the same way the auditing folder retries, rather than asserted once."
+					},
+					"response": []
+				},
+				{
+					"name": "Publish the item - ACTIVE (COS Admin)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const attempt = Number(pm.collectionVariables.get(\"cat_patch_attempt\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"cat_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const KEY = \"cat_patch_attempt\";",
+									"const maxAttempts = Number(pm.environment.get(\"cat_retry_max\") || 8);",
+									"const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"// 404 here is the index, not the item: the write path cannot see it yet.",
+									"if (pm.response.code === 404 && attempt < maxAttempts) {",
+									"    console.log(\"[cat] the write path cannot see the item yet, attempt \" +",
+									"                attempt + \"/\" + maxAttempts);",
+									"    if (pm.execution && pm.execution.setNextRequest) {",
+									"        pm.execution.setNextRequest(pm.info.requestName);",
+									"    } else {",
+									"        postman.setNextRequest(pm.info.requestName);",
+									"    }",
+									"} else {",
+									"    pm.collectionVariables.set(KEY, 0);",
+									"    pm.test(\"HTTP 2xx\", function () {",
+									"        pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"    });",
+									"    pm.test(\"publish acknowledged\", function () {",
+									"        pm.expect(pm.response.json().type, pm.response.text()).to.include(\"success\");",
+									"    });",
+									"    console.log(\"[cat] published \" + pm.collectionVariables.get(\"item_id\") +",
+									"                \" after \" + attempt + \" attempt(s)\");",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{cosadmin_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"publishStatus\": \"{{item_publish_status}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/cat/item?id={{item_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"cat",
+								"item"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "{{item_id}}"
+								}
+							]
+						},
+						"description": "Only a COS Admin may set publishStatus, and an item that is not ACTIVE does not appear in the UI however complete it is. Retried on 404: the catalogue decides whether an item exists with a *search*, and the read above finding it does not mean the write path can - they take different routes into the index, and the write one is sometimes a beat behind."
+					},
+					"response": []
+				},
+				{
+					"name": "Confirm the item is visible in the catalogue",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// The catalogue answers a read from its index, and the publish above is a",
+									"// write — so the first read back can still show the pre-publish document.",
+									"const attempt = Number(pm.collectionVariables.get(\"cat_publish_attempt\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"cat_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const KEY = \"cat_publish_attempt\";",
+									"const maxAttempts = Number(pm.environment.get(\"cat_retry_max\") || 8);",
+									"const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"const payload = pm.response.json();",
+									"const rows = payload.result || payload.results || [];",
+									"const doc = Array.isArray(rows) ? (rows[0] || {}) : rows;",
+									"const published = String(doc.publishStatus || \"\") === \"ACTIVE\";",
+									"",
+									"if (!published && attempt < maxAttempts) {",
+									"    console.log(\"[cat] publishStatus=\" + doc.publishStatus + \", attempt \" +",
+									"                attempt + \"/\" + maxAttempts);",
+									"    if (pm.execution && pm.execution.setNextRequest) {",
+									"        pm.execution.setNextRequest(pm.info.requestName);",
+									"    } else {",
+									"        postman.setNextRequest(pm.info.requestName);",
+									"    }",
+									"} else {",
+									"    pm.collectionVariables.set(KEY, 0);",
+									"    pm.test(\"HTTP 2xx\", function () {",
+									"        pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"    });",
+									"    pm.test(\"publishStatus is ACTIVE\", function () {",
+									"        pm.expect(String(doc.publishStatus || \"\"),",
+									"                  \"still not published after \" + attempt + \" read(s)\").to.eql(\"ACTIVE\");",
+									"    });",
+									"    // The UI needs both halves: ACTIVE, and a data upload to point at.",
+									"    pm.test(\"dataUploadStatus is true\", function () {",
+									"        pm.expect(doc.dataUploadStatus, \"a non-empty mediaURL is what sets it\").to.eql(true);",
+									"    });",
+									"    console.log(\"[cat] after \" + attempt + \" read(s): publishStatus=\" +",
+									"                doc.publishStatus + \" dataUploadStatus=\" + doc.dataUploadStatus);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/cat/item?id={{item_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"cat",
+								"item"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "{{item_id}}"
+								}
+							]
+						},
+						"description": "What the UI needs, read back: an item shows only when publishStatus is ACTIVE *and* dataUploadStatus is true — the second comes from a non-empty mediaURL on the create."
+					},
+					"response": []
+				}
+			],
+			"description": "The freshly minted org admin (who also holds `provider`) publishes an asset. Every field of the payload is driven by an environment variable."
+		},
+		{
+			"name": "03 - Access request",
+			"item": [
+				{
+					"name": "Create access request (Consumer)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"request accepted\", function () {",
+									"    pm.expect(pm.response.json().type).to.include(\"success\");",
+									"});",
+									"",
+									"// The create API returns only {type,title,detail} - the id is fetched in the",
+									"// next request, from the org admin's queue.",
+									"console.log(\"[acl] \" + pm.response.json().detail);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{consumer_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"itemId\": \"{{item_id}}\",\n  \"requestType\": \"{{access_request_type}}\",\n  \"additionalInfo\": {\n    \"name\": \"{{access_requester_name}}\",\n    \"email\": \"{{access_requester_email}}\",\n    \"phone\": \"{{access_requester_phone}}\",\n    \"purpose\": \"{{access_purpose}}\",\n    \"description\": \"{{access_description}}\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{acl_url}}/iudx/acl/apd/v2/access_request",
+							"host": [
+								"{{acl_url}}"
+							],
+							"path": [
+								"iudx",
+								"acl",
+								"apd",
+								"v2",
+								"access_request"
+							]
+						},
+						"description": "A consumer cannot request access to their own asset, and a second request for an access type that is already pending or granted is rejected with 409."
+					},
+					"response": []
+				},
+				{
+					"name": "List org access requests (Org Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const body = pm.response.json();",
+									"const rows = body.result || body.results || [];",
+									"const wanted = pm.collectionVariables.get(\"item_id\");",
+									"const match = rows.find(function (r) { return r.asset && r.asset.itemId === wanted; });",
+									"",
+									"pm.test(\"consumer request is in the org admin queue\", function () {",
+									"    pm.expect(match, \"no pending request for item \" + wanted).to.be.an(\"object\");",
+									"});",
+									"",
+									"if (match) {",
+									"    pm.collectionVariables.set(\"access_request_id\", match.requestId);",
+									"    console.log(\"[acl] request \" + match.requestId + \" from \" + match.user.consumerEmail);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{acl_url}}/iudx/acl/apd/v2/access_request/organisation?requestStatus={{access_request_status_filter}}&page={{page}}&size={{size}}",
+							"host": [
+								"{{acl_url}}"
+							],
+							"path": [
+								"iudx",
+								"acl",
+								"apd",
+								"v2",
+								"access_request",
+								"organisation"
+							],
+							"query": [
+								{
+									"key": "requestStatus",
+									"value": "{{access_request_status_filter}}"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{size}}"
+								}
+							]
+						},
+						"description": "Lists requests raised against every asset in the org admin's organisation. Matches on `asset.itemId` and stores `access_request_id`."
+					},
+					"response": []
+				},
+				{
+					"name": "Approve access request (Org Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"decision applied\", function () {",
+									"    pm.expect(pm.response.json().type).to.include(\"success\");",
+									"});",
+									"console.log(\"[acl] \" + pm.response.json().detail);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"requestId\": \"{{access_request_id}}\",\n  \"status\": \"{{access_decision}}\",\n  \"expiryAt\": \"{{access_expiry_at}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{acl_url}}/iudx/acl/apd/v2/access_request",
+							"host": [
+								"{{acl_url}}"
+							],
+							"path": [
+								"iudx",
+								"acl",
+								"apd",
+								"v2",
+								"access_request"
+							]
+						},
+						"description": "Set `access_decision` to `granted` or `rejected`. Only PENDING requests can be updated. On `granted` an ACTIVE policy is created, expiring at `expiryAt` (ISO 8601). Omitting `constraints` grants every access type the resource supports; add a `constraints` object here to narrow it. For a rejection, drop `expiryAt` from the body."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify access (Consumer)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const body = pm.response.json();",
+									"pm.test(\"consumer now has access\", function () {",
+									"    pm.expect(body.type, pm.response.text()).to.include(\"success\");",
+									"});",
+									"console.log(\"[acl] \" + JSON.stringify(body.result));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{consumer_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"itemId\": \"{{item_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{acl_url}}/iudx/acl/apd/v2/access_request/has_access",
+							"host": [
+								"{{acl_url}}"
+							],
+							"path": [
+								"iudx",
+								"acl",
+								"apd",
+								"v2",
+								"access_request",
+								"has_access"
+							]
+						},
+						"description": "Confirms the policy landed. Accepts `itemId` only - no other properties."
+					},
+					"response": []
+				}
+			],
+			"description": "The consumer asks for access to the published asset; the org admin (the asset owner from folder 02) approves it, which creates an ACTIVE policy. The create call returns no id, so the id is read back from the org admin's queue."
+		},
+		{
+			"name": "04 - Auditing",
+			"item": [
+				{
+					"name": "Consumer activity - access request audited",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Auditing is asynchronous: the log is published to RabbitMQ after the response is",
+									"// written and inserted by a consumer, so it is not readable immediately. Every",
+									"// attempt after the first waits before re-querying.",
+									"const attempt = Number(pm.collectionVariables.get(\"audit_attempt_consumer\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"audit_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const EXPECTED = [\"Download Access Requested\"];",
+									"const KEY = \"audit_attempt_consumer\";",
+									"const maxAttempts = Number(pm.environment.get(\"audit_retry_max\") || 8);",
+									"const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"// 204 is the API's \"no rows\" answer for the consumer endpoint - an empty page.",
+									"const rows = pm.response.code === 204 ? [] : ((pm.response.json() || {}).result || []);",
+									"const actions = rows.map(function (r) { return r.action; });",
+									"const missing = EXPECTED.filter(function (a) { return actions.indexOf(a) === -1; });",
+									"",
+									"if (missing.length && attempt < maxAttempts) {",
+									"    console.log(\"[audit] \" + KEY + \" attempt \" + attempt + \"/\" + maxAttempts +",
+									"                \" - still waiting for: \" + missing.join(\", \"));",
+									"    if (pm.execution && pm.execution.setNextRequest) {",
+									"        pm.execution.setNextRequest(pm.info.requestName);",
+									"    } else {",
+									"        postman.setNextRequest(pm.info.requestName);",
+									"    }",
+									"} else {",
+									"    pm.collectionVariables.set(KEY, 0);",
+									"    pm.test(\"HTTP 200\", function () {",
+									"        pm.expect(pm.response.code, pm.response.text()).to.eql(200);",
+									"    });",
+									"    pm.test(\"audited: \" + EXPECTED.join(\" + \"), function () {",
+									"        pm.expect(missing, \"not audited after \" + attempt + \" attempt(s); saw [\" +",
+									"                  actions.join(\" | \") + \"]\").to.eql([]);",
+									"    });",
+									"    console.log(\"[audit] \" + rows.length + \" row(s): \" + actions.join(\" | \"));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{consumer_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auditing/consumer/activity?assetId={{item_id}}&page={{page}}&size={{audit_size}}&sort={{audit_sort}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auditing",
+								"consumer",
+								"activity"
+							],
+							"query": [
+								{
+									"key": "assetId",
+									"value": "{{item_id}}"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{audit_size}}"
+								},
+								{
+									"key": "sort",
+									"value": "{{audit_sort}}"
+								}
+							]
+						},
+						"description": "The consumer endpoint is hard-filtered to the caller's own `user_id`, so this returns exactly what folder 03 recorded for this consumer against the asset. Returns 204 with no body while the row has not been consumed yet, which the test treats as an empty page and retries."
+					},
+					"response": []
+				},
+				{
+					"name": "COS Admin activity - full asset trail",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Auditing is asynchronous: the log is published to RabbitMQ after the response is",
+									"// written and inserted by a consumer, so it is not readable immediately. Every",
+									"// attempt after the first waits before re-querying.",
+									"const attempt = Number(pm.collectionVariables.get(\"audit_attempt_cos_asset\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"audit_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const EXPECTED = [\"Create\", \"Download Access Requested\", \"Download Access Granted\"];",
+									"const KEY = \"audit_attempt_cos_asset\";",
+									"const maxAttempts = Number(pm.environment.get(\"audit_retry_max\") || 8);",
+									"const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"// 204 is the API's \"no rows\" answer for the consumer endpoint - an empty page.",
+									"const rows = pm.response.code === 204 ? [] : ((pm.response.json() || {}).result || []);",
+									"const actions = rows.map(function (r) { return r.action; });",
+									"const missing = EXPECTED.filter(function (a) { return actions.indexOf(a) === -1; });",
+									"",
+									"if (missing.length && attempt < maxAttempts) {",
+									"    console.log(\"[audit] \" + KEY + \" attempt \" + attempt + \"/\" + maxAttempts +",
+									"                \" - still waiting for: \" + missing.join(\", \"));",
+									"    if (pm.execution && pm.execution.setNextRequest) {",
+									"        pm.execution.setNextRequest(pm.info.requestName);",
+									"    } else {",
+									"        postman.setNextRequest(pm.info.requestName);",
+									"    }",
+									"} else {",
+									"    pm.collectionVariables.set(KEY, 0);",
+									"    pm.test(\"HTTP 200\", function () {",
+									"        pm.expect(pm.response.code, pm.response.text()).to.eql(200);",
+									"    });",
+									"    pm.test(\"audited: \" + EXPECTED.join(\" + \"), function () {",
+									"        pm.expect(missing, \"not audited after \" + attempt + \" attempt(s); saw [\" +",
+									"                  actions.join(\" | \") + \"]\").to.eql([]);",
+									"    });",
+									"    console.log(\"[audit] \" + rows.length + \" row(s): \" + actions.join(\" | \"));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{cosadmin_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auditing/admin/activity?assetId={{item_id}}&page={{page}}&size={{audit_size}}&sort={{audit_sort}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auditing",
+								"admin",
+								"activity"
+							],
+							"query": [
+								{
+									"key": "assetId",
+									"value": "{{item_id}}"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{audit_size}}"
+								},
+								{
+									"key": "sort",
+									"value": "{{audit_sort}}"
+								}
+							]
+						},
+						"description": "A `cos_admin` reads at platform level, so no organisation filter is applied and every `ASSET` row for this item is visible regardless of who wrote it: `Create` from the catalogue (folder 02), `Download Access Requested` and `Download Access Granted` from ACL/APD (folder 03). The read-back in folder 02 adds a `View` row too."
+					},
+					"response": []
+				},
+				{
+					"name": "COS Admin activity - requester onboarding trail",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Auditing is asynchronous: the log is published to RabbitMQ after the response is",
+									"// written and inserted by a consumer, so it is not readable immediately. Every",
+									"// attempt after the first waits before re-querying.",
+									"const attempt = Number(pm.collectionVariables.get(\"audit_attempt_cos_requester\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"audit_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const EXPECTED = [\"Request for creation of organisation\"];",
+									"const KEY = \"audit_attempt_cos_requester\";",
+									"const maxAttempts = Number(pm.environment.get(\"audit_retry_max\") || 8);",
+									"const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"// 204 is the API's \"no rows\" answer for the consumer endpoint - an empty page.",
+									"const rows = pm.response.code === 204 ? [] : ((pm.response.json() || {}).result || []);",
+									"const actions = rows.map(function (r) { return r.action; });",
+									"const missing = EXPECTED.filter(function (a) { return actions.indexOf(a) === -1; });",
+									"",
+									"if (missing.length && attempt < maxAttempts) {",
+									"    console.log(\"[audit] \" + KEY + \" attempt \" + attempt + \"/\" + maxAttempts +",
+									"                \" - still waiting for: \" + missing.join(\", \"));",
+									"    if (pm.execution && pm.execution.setNextRequest) {",
+									"        pm.execution.setNextRequest(pm.info.requestName);",
+									"    } else {",
+									"        postman.setNextRequest(pm.info.requestName);",
+									"    }",
+									"} else {",
+									"    pm.collectionVariables.set(KEY, 0);",
+									"    pm.test(\"HTTP 200\", function () {",
+									"        pm.expect(pm.response.code, pm.response.text()).to.eql(200);",
+									"    });",
+									"    pm.test(\"audited: \" + EXPECTED.join(\" + \"), function () {",
+									"        pm.expect(missing, \"not audited after \" + attempt + \" attempt(s); saw [\" +",
+									"                  actions.join(\" | \") + \"]\").to.eql([]);",
+									"    });",
+									"    console.log(\"[audit] \" + rows.length + \" row(s): \" + actions.join(\" | \"));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{cosadmin_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auditing/admin/activity?userId={{requester_user_id}}&logType=USER_ACTION&page={{page}}&size={{audit_size}}&sort={{audit_sort}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auditing",
+								"admin",
+								"activity"
+							],
+							"query": [
+								{
+									"key": "userId",
+									"value": "{{requester_user_id}}"
+								},
+								{
+									"key": "logType",
+									"value": "USER_ACTION"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{audit_size}}"
+								},
+								{
+									"key": "sort",
+									"value": "{{audit_sort}}"
+								}
+							]
+						},
+						"description": "Organisation actions are `USER_ACTION` rows, not `ASSET` rows, and carry no `assetId` - so they are found by `userId` instead. This one was written when the requester submitted the create request in folder 01, before the organisation existed."
+					},
+					"response": []
+				},
+				{
+					"name": "COS Admin activity - approval audited",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Auditing is asynchronous: the log is published to RabbitMQ after the response is",
+									"// written and inserted by a consumer, so it is not readable immediately. Every",
+									"// attempt after the first waits before re-querying.",
+									"const attempt = Number(pm.collectionVariables.get(\"audit_attempt_cos_self\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"audit_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const EXPECTED = [\"Update organisation creation request status\"];",
+									"const KEY = \"audit_attempt_cos_self\";",
+									"const maxAttempts = Number(pm.environment.get(\"audit_retry_max\") || 8);",
+									"const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"// 204 is the API's \"no rows\" answer for the consumer endpoint - an empty page.",
+									"const rows = pm.response.code === 204 ? [] : ((pm.response.json() || {}).result || []);",
+									"const actions = rows.map(function (r) { return r.action; });",
+									"const missing = EXPECTED.filter(function (a) { return actions.indexOf(a) === -1; });",
+									"",
+									"if (missing.length && attempt < maxAttempts) {",
+									"    console.log(\"[audit] \" + KEY + \" attempt \" + attempt + \"/\" + maxAttempts +",
+									"                \" - still waiting for: \" + missing.join(\", \"));",
+									"    if (pm.execution && pm.execution.setNextRequest) {",
+									"        pm.execution.setNextRequest(pm.info.requestName);",
+									"    } else {",
+									"        postman.setNextRequest(pm.info.requestName);",
+									"    }",
+									"} else {",
+									"    pm.collectionVariables.set(KEY, 0);",
+									"    pm.test(\"HTTP 200\", function () {",
+									"        pm.expect(pm.response.code, pm.response.text()).to.eql(200);",
+									"    });",
+									"    pm.test(\"audited: \" + EXPECTED.join(\" + \"), function () {",
+									"        pm.expect(missing, \"not audited after \" + attempt + \" attempt(s); saw [\" +",
+									"                  actions.join(\" | \") + \"]\").to.eql([]);",
+									"    });",
+									"    console.log(\"[audit] \" + rows.length + \" row(s): \" + actions.join(\" | \"));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{cosadmin_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auditing/admin/activity?userId={{cosadmin_user_id}}&logType=USER_ACTION&page={{page}}&size={{audit_size}}&sort={{audit_sort}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auditing",
+								"admin",
+								"activity"
+							],
+							"query": [
+								{
+									"key": "userId",
+									"value": "{{cosadmin_user_id}}"
+								},
+								{
+									"key": "logType",
+									"value": "USER_ACTION"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{audit_size}}"
+								},
+								{
+									"key": "sort",
+									"value": "{{audit_sort}}"
+								}
+							]
+						},
+						"description": "The approving admin's own trail. The COS Admin's list calls are audited as well, so expect `Get requests` rows alongside the approval."
+					},
+					"response": []
+				},
+				{
+					"name": "Org Admin activity - organisation scope",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Auditing is asynchronous: the log is published to RabbitMQ after the response is",
+									"// written and inserted by a consumer, so it is not readable immediately. Every",
+									"// attempt after the first waits before re-querying.",
+									"const attempt = Number(pm.collectionVariables.get(\"audit_attempt_org_admin\") || 0);",
+									"if (attempt > 0) {",
+									"    const until = Date.now() + Number(pm.environment.get(\"audit_retry_delay_ms\") || 2000);",
+									"    while (Date.now() < until) { /* the sandbox has no sleep() */ }",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Only asserted where `org_claim_mapped` is enabled - see the request description.",
+									"if (String(pm.environment.get(\"org_claim_mapped\") || \"false\") !== \"true\") {",
+									"    console.log(\"[audit] skipped - org_claim_mapped is not enabled in the environment\");",
+									"} else {",
+									"    const EXPECTED = [\"Create\", \"Download Access Granted\"];",
+									"    const KEY = \"audit_attempt_org_admin\";",
+									"    const maxAttempts = Number(pm.environment.get(\"audit_retry_max\") || 8);",
+									"    const attempt = Number(pm.collectionVariables.get(KEY) || 0) + 1;",
+									"    pm.collectionVariables.set(KEY, attempt);",
+									"",
+									"    // 204 is the API's \"no rows\" answer for the consumer endpoint - an empty page.",
+									"    const rows = pm.response.code === 204 ? [] : ((pm.response.json() || {}).result || []);",
+									"    const actions = rows.map(function (r) { return r.action; });",
+									"    const missing = EXPECTED.filter(function (a) { return actions.indexOf(a) === -1; });",
+									"",
+									"    if (missing.length && attempt < maxAttempts) {",
+									"        console.log(\"[audit] \" + KEY + \" attempt \" + attempt + \"/\" + maxAttempts +",
+									"                    \" - still waiting for: \" + missing.join(\", \"));",
+									"        if (pm.execution && pm.execution.setNextRequest) {",
+									"            pm.execution.setNextRequest(pm.info.requestName);",
+									"        } else {",
+									"            postman.setNextRequest(pm.info.requestName);",
+									"        }",
+									"    } else {",
+									"        pm.collectionVariables.set(KEY, 0);",
+									"        pm.test(\"HTTP 200\", function () {",
+									"            pm.expect(pm.response.code, pm.response.text()).to.eql(200);",
+									"        });",
+									"        pm.test(\"audited: \" + EXPECTED.join(\" + \"), function () {",
+									"            pm.expect(missing, \"not audited after \" + attempt + \" attempt(s); saw [\" +",
+									"                      actions.join(\" | \") + \"]\").to.eql([]);",
+									"        });",
+									"        console.log(\"[audit] \" + rows.length + \" row(s): \" + actions.join(\" | \"));",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/auditing/admin/activity?assetId={{item_id}}&page={{page}}&size={{audit_size}}&sort={{audit_sort}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"auditing",
+								"admin",
+								"activity"
+							],
+							"query": [
+								{
+									"key": "assetId",
+									"value": "{{item_id}}"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{audit_size}}"
+								},
+								{
+									"key": "sort",
+									"value": "{{audit_sort}}"
+								}
+							]
+						},
+						"description": "Same endpoint as above, but an `org_admin` reads at organisation level, so the server adds an `org_id` filter. The `org_id` stored on a row comes *only* from the `organisation_id` token claim - there is no database fallback - so on a realm without that protocol mapper every row is written with a null `org_id` and this query returns nothing. The assertions are therefore gated on `org_claim_mapped`; set it to `true` once the mapper exists, and the request logs a skip notice until then."
+					},
+					"response": []
+				}
+			],
+			"description": "Verifies that the six writes above actually landed in `activity_audit_log`, by reading them back through the activity API.\n\n**Run this folder once, at the end - not after every request.** Auditing is asynchronous (published to RabbitMQ once the response has been written, then inserted by a consumer), so an immediate read races the consumer; and the activity API is filterable and paginated, so a single call per actor can assert the whole trail. Each request below retries itself up to `audit_retry_max` times with `audit_retry_delay_ms` between attempts - which needs the Collection Runner or Newman, since `setNextRequest` is a no-op on a single send.\n\nVisibility is role-scoped, which is why there is more than one call: a consumer sees only their own rows, an org admin only their organisation's, and only a COS Admin sees everything."
+		},
+		{
+			"name": "05 - Teardown",
+			"item": [
+				{
+					"name": "Delete item - blocked by active policy (Org Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"delete is blocked while a policy is active\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.eql(409);",
+									"});",
+									"console.log(\"[del] \" + (pm.response.json().detail || pm.response.text()));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/cat/item?id={{item_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"cat",
+								"item"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "{{item_id}}"
+								}
+							]
+						},
+						"description": "Expected to fail with 409. This is the guard that makes the rest of this folder necessary: the item cannot be removed while a policy references it. Skip this request if you only want the happy path."
+					},
+					"response": []
+				},
+				{
+					"name": "List provider policies (Org Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"const rows = pm.response.json().result || [];",
+									"const wanted = pm.collectionVariables.get(\"item_id\");",
+									"const match = rows.find(function (p) {",
+									"    return p.asset && p.asset.itemId === wanted && p.status === \"ACTIVE\";",
+									"});",
+									"",
+									"pm.test(\"active policy found for the item\", function () {",
+									"    pm.expect(match, \"no ACTIVE policy for item \" + wanted).to.be.an(\"object\");",
+									"});",
+									"",
+									"if (match) {",
+									"    pm.collectionVariables.set(\"policy_id\", match.policyId);",
+									"    console.log(\"[pol] \" + match.policyId + \" -> \" + match.user.consumerEmail +",
+									"                \" expires \" + match.expiryAt);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{acl_url}}/iudx/acl/apd/v2/policy/provider?status={{policy_status_filter}}&page={{page}}&size={{size}}",
+							"host": [
+								"{{acl_url}}"
+							],
+							"path": [
+								"iudx",
+								"acl",
+								"apd",
+								"v2",
+								"policy",
+								"provider"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "{{policy_status_filter}}"
+								},
+								{
+									"key": "page",
+									"value": "{{page}}"
+								},
+								{
+									"key": "size",
+									"value": "{{size}}"
+								}
+							]
+						},
+						"description": "The approval in folder 03 created the policy server-side, so its id was never returned to the client. Lists the policies on the caller's assets and stores `policy_id` for the ACTIVE one matching `asset.itemId`. Add `policyType=ACCESS_REQUEST_APPROVED` to see only approval-created policies."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete policy (Org Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"policy deleted\", function () {",
+									"    pm.expect(pm.response.json().type).to.include(\"success\");",
+									"});",
+									"console.log(\"[pol] \" + pm.response.json().detail);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{acl_url}}/iudx/acl/apd/v2/policy?id={{policy_id}}",
+							"host": [
+								"{{acl_url}}"
+							],
+							"path": [
+								"iudx",
+								"acl",
+								"apd",
+								"v2",
+								"policy"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "{{policy_id}}"
+								}
+							]
+						},
+						"description": "A soft delete despite the name - the policy moves from `ACTIVE` to `DELETE` along with its access rules, and the record is retained for audit. Access granted through it is revoked immediately and it cannot be reactivated; a new policy has to be created instead. The caller must be the asset's provider or an org admin of its organisation, and the policy must currently be ACTIVE."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify access is revoked (Consumer)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"access is gone\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.not.eql(200);",
+									"});",
+									"console.log(\"[acl] \" + pm.response.text().slice(0, 200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{consumer_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"itemId\": \"{{item_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{acl_url}}/iudx/acl/apd/v2/access_request/has_access",
+							"host": [
+								"{{acl_url}}"
+							],
+							"path": [
+								"iudx",
+								"acl",
+								"apd",
+								"v2",
+								"access_request",
+								"has_access"
+							]
+						},
+						"description": "The mirror of the check at the end of folder 03 - the consumer that was granted access should no longer have it."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete catalogue item (Org Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 2xx\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"item deleted\", function () {",
+									"    pm.expect(pm.response.json().type).to.include(\"success\");",
+									"});",
+									"console.log(\"[del] \" + pm.response.json().detail);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{requester_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/iudx/v2/cat/item?id={{item_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"iudx",
+								"v2",
+								"cat",
+								"item"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "{{item_id}}"
+								}
+							]
+						},
+						"description": "Succeeds now that no ACTIVE policy points at the item. The item is backed up before removal and a `Delete` audit row is written."
+					},
+					"response": []
+				}
+			],
+			"description": "Removes what the run created, in the only order the server accepts: the policy first, then the asset.\n\n`DELETE /cat/item` checks `hasActivePolicies(assetId)` before it does anything and fails with **409 Conflict - \"Item cannot be deleted as it has active policies\"** while the grant from folder 03 is still ACTIVE. The first request here asserts that 409 deliberately, so the guard itself is covered; then the policy is soft-deleted (`ACTIVE` -> `DELETE`, rules included, record kept for traceability) and the same delete succeeds.\n\nBoth deletes are audited too - they add `Delete` rows - so run folder 04 before this one if you want its assertions to see the trail as it was."
+		},
+		{
+			"name": "06 - Other servers",
+			"description": "The servers the onboarding story does not otherwise touch - one call each at the file server and OGC, three at the community layer (its health route plus the public read of each product it mounts) and two at the sandbox (health, then an unauthenticated call to a real API route): the same calls main/e2e.py's community and sandbox checks make. Each server runs as its own phase and only where it is enabled in config; the file and OGC reads address the item this run onboarded, so they run after the data has been published. Every one of them is a read: nothing here needs tearing down.",
+			"item": [
+				{
+					"name": "File server - download the databank this run onboarded",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 200 - the granted consumer can download it\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.eql(200);",
+									"});",
+									"pm.test(\"the response carries a body\", function () {",
+									"    pm.expect(pm.response.responseSize, \"empty download\").to.be.above(0);",
+									"});",
+									"console.log(\"[file] \" + pm.response.responseSize + \" byte(s), \" +",
+									"            (pm.response.headers.get(\"Content-Type\") || \"no content-type\"));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{consumer_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{files_server_host}}/databanks/{{item_id}}/download",
+							"host": [
+								"{{files_server_host}}"
+							],
+							"path": [
+								"databanks",
+								"{{item_id}}",
+								"download"
+							]
+						},
+						"description": "The consumer this run granted access to reads the file behind the item. The same read the resource-server script phase makes, as a request the collection owns."
+					},
+					"response": []
+				},
+				{
+					"name": "OGC - STAC items for the collection this run created",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 200\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.eql(200);",
+									"});",
+									"const body = pm.response.json();",
+									"pm.test(\"the collection holds at least one item\", function () {",
+									"    pm.expect(body.features, \"no features in the STAC reply\").to.be.an(\"array\").that.is.not.empty;",
+									"});",
+									"console.log(\"[ogc] \" + (body.features || []).length + \" feature(s)\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{ogc_host}}/stac/collections/{{item_id}}/items",
+							"host": [
+								"{{ogc_host}}"
+							],
+							"path": [
+								"stac",
+								"collections",
+								"{{item_id}}",
+								"items"
+							]
+						},
+						"description": "OGC serves the raster this run onboarded. The path is public by design, so this asserts the data is there rather than that it is guarded."
+					},
+					"response": []
+				},
+				{
+					"name": "Community - health and every dependency it reports",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 200\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.eql(200);",
+									"});",
+									"const deps = (pm.response.json() || {}).data || {};",
+									"pm.test(\"the health route reports its dependencies\", function () {",
+									"    pm.expect(Object.keys(deps), \"no dependency map\").to.not.be.empty;",
+									"});",
+									"Object.keys(deps).forEach(function (name) {",
+									"    pm.test(\"dependency up: \" + name, function () {",
+									"        pm.expect(deps[name], name + \" is down\").to.eql(true);",
+									"    });",
+									"});",
+									"console.log(\"[community] \" + JSON.stringify(deps));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{community_url}}/healthz",
+							"host": [
+								"{{community_url}}"
+							],
+							"path": [
+								"healthz"
+							]
+						},
+						"description": "The community layer runs SELECT 1 against Postgres and head_bucket against S3 for this route, so the per-dependency map is asserted rather than the status: a failure then says which dependency is down."
+					},
+					"response": []
+				},
+				{
+					"name": "Community - discussion serves its own data without a token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 200 - the public read answers without a token\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.eql(200);",
+									"});",
+									"const body = pm.response.json() || {};",
+									"pm.test(\"the envelope does not report a failure\", function () {",
+									"    pm.expect(body.success, String(body.message)).to.not.eql(false);",
+									"});",
+									"pm.test(\"the popular tags come back as a list\", function () {",
+									"    pm.expect(body.data, \"no tags in the reply\").to.be.an(\"array\");",
+									"});",
+									"console.log(\"[community/discussion] \" + (body.data || []).length + \" popular tag(s)\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{community_url}}/discussion/tags/popular",
+							"host": [
+								"{{community_url}}"
+							],
+							"path": [
+								"discussion",
+								"tags",
+								"popular"
+							]
+						},
+						"description": "The token-optional read main/e2e.py's community check makes: /discussion/tags/popular is an http_bearer_header_public route, so it answers an anonymous caller with real data. That is the positive half of the community check - it proves the discussion router is mounted (a deployment whose ACTIVATED_SERVICES omits it answers 404, not 401) and that the product is reading its own database. Deliberately unauthenticated: an authenticated request inserts a users row that no route deletes, and the public bearer returns early before that code is reached. Nothing is created."
+					},
+					"response": []
+				},
+				{
+					"name": "Community - challenge serves its own data without a token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 200 - the public read answers without a token\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.eql(200);",
+									"});",
+									"const body = pm.response.json() || {};",
+									"pm.test(\"the envelope does not report a failure\", function () {",
+									"    pm.expect(body.success, String(body.message)).to.not.eql(false);",
+									"});",
+									"const listing = (body.data || {}).competitions;",
+									"pm.test(\"the challenge listing comes back as a list\", function () {",
+									"    pm.expect(listing, \"no competitions in the reply\").to.be.an(\"array\");",
+									"});",
+									"console.log(\"[community/challenge] \" + (listing || []).length + \" challenge(s)\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{community_url}}/challenge/all",
+							"host": [
+								"{{community_url}}"
+							],
+							"path": [
+								"challenge",
+								"all"
+							]
+						},
+						"description": "The other half of the same check, for the second product the service mounts. /challenge/{choice} is http_bearer_header_public, so `all` lists the challenges to an anonymous caller; a deployment running Discussion only answers 404 here, which is the router not being mounted rather than the call being refused. Unauthenticated for the same reason as the discussion read: no token, no users row."
+					},
+					"response": []
+				},
+				{
+					"name": "Sandbox - health, the route that sits outside the auth middleware",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"HTTP 200 - the service is up and serving\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.eql(200);",
+									"});",
+									"const body = pm.response.json() || {};",
+									"pm.test(\"it reports itself healthy\", function () {",
+									"    pm.expect(String(body.status).toLowerCase(), \"status is not ok\").to.eql(\"ok\");",
+									"});",
+									"console.log(\"[sandbox] status=\" + body.status + \" version=\" + (body.version || \"none reported\"));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{sandbox_url}}/v1/health",
+							"host": [
+								"{{sandbox_url}}"
+							],
+							"path": [
+								"v1",
+								"health"
+							]
+						},
+						"description": "The health call main/e2e.py's sandbox check makes. The handler is a literal {\"status\": \"ok\", \"version\": …}, so the body is asserted rather than the status alone - a 200 carrying \"degraded\" is a pass by status and a failure in fact. This proves the process is up and serving; it says nothing about auth, because the route is registered outside authMiddleware, which is what the request after it is for. No token, nothing created."
+					},
+					"response": []
+				},
+				{
+					"name": "Sandbox - notebook list without a token is refused",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"401/403 - auth sits in front of the API\", function () {",
+									"    pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.be.oneOf([401, 403]);",
+									"});",
+									"console.log(\"[sandbox] \" + pm.response.code + \" \" + pm.response.text().slice(0, 200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{sandbox_url}}/v1/notebook/list",
+							"host": [
+								"{{sandbox_url}}"
+							],
+							"path": [
+								"v1",
+								"notebook",
+								"list"
+							]
+						},
+						"description": "Deliberately unauthenticated. /v1/health is registered outside the auth middleware, so it answers 200 even where auth is broken or absent; only an unauthenticated call to a real API route shows the middleware is there. Nothing is created - the listing only reads."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "requester_token",
+			"value": ""
+		},
+		{
+			"key": "requester_refresh_token",
+			"value": ""
+		},
+		{
+			"key": "requester_user_id",
+			"value": ""
+		},
+		{
+			"key": "cosadmin_token",
+			"value": ""
+		},
+		{
+			"key": "cosadmin_refresh_token",
+			"value": ""
+		},
+		{
+			"key": "cosadmin_user_id",
+			"value": ""
+		},
+		{
+			"key": "consumer_token",
+			"value": ""
+		},
+		{
+			"key": "consumer_refresh_token",
+			"value": ""
+		},
+		{
+			"key": "consumer_user_id",
+			"value": ""
+		},
+		{
+			"key": "org_name",
+			"value": ""
+		},
+		{
+			"key": "org_manager_email",
+			"value": ""
+		},
+		{
+			"key": "org_request_id",
+			"value": ""
+		},
+		{
+			"key": "org_id",
+			"value": ""
+		},
+		{
+			"key": "item_name",
+			"value": ""
+		},
+		{
+			"key": "item_id",
+			"value": ""
+		},
+		{
+			"key": "access_request_id",
+			"value": ""
+		},
+		{
+			"key": "policy_id",
+			"value": ""
+		},
+		{
+			"key": "cat_get_attempt",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "cat_publish_attempt",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "cat_patch_attempt",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "audit_attempt_consumer",
+			"value": ""
+		},
+		{
+			"key": "audit_attempt_cos_asset",
+			"value": ""
+		},
+		{
+			"key": "audit_attempt_cos_requester",
+			"value": ""
+		},
+		{
+			"key": "audit_attempt_cos_self",
+			"value": ""
+		},
+		{
+			"key": "audit_attempt_org_admin",
+			"value": ""
+		}
+	]
+}

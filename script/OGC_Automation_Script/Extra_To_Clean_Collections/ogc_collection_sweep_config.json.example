@@ -1,0 +1,35 @@
+{
+  "postgres": {
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "ogc_rs_v2",
+    "schema": "",
+    "user": "<db-user>",
+    "password": "${OGC_PG_PASS:-}",
+    "sslmode": "prefer",
+    "connect_timeout_seconds": 15
+  },
+  "target": {
+    "collection_ids": [],
+    "title_prefix": "e2e-",
+    "owner_user_ids": [],
+    "labels": [
+      {
+        "title": "",
+        "description": ""
+      }
+    ],
+    "protected_owner_ids": [
+      "<borrowed-ogc-provider-keycloak-id>"
+    ],
+    "remove_roles_rows_for": []
+  },
+  "delete": {
+    "clear_stac_children": true,
+    "drop_table": true,
+    "verify": true
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

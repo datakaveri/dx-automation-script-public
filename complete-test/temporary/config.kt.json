@@ -1,0 +1,265 @@
+{
+  "_note": [
+    "",
+    "It exists because the restructured ControlPlane collection is not finished,",
+    "and the cut-down onboarding collection under",
+    "resource/Controlplane_temporary_check_1/ is what there is to walk through:",
+    "sign in, onboard an organisation, publish a catalogue item, request and",
+    "grant access, read the audit trail, tear it all down. The data plane runs",
+    "exactly as it does in config.json.",
+    "",
+    "This file is a DIFF of ../config.json — `extends` above every other key —",
+    "so the deployment, the credentials and the resource servers stay in one",
+    "place. Delete this directory to go back to the settled setup; nothing in",
+    "config.json was changed for the demo."
+  ],
+  "extends": "../config.json",
+  "run": {
+    "prefix": "kt-demo",
+    "report_dir": "reports/kt",
+    "cleanup": true,
+    "verify_cleanup": true
+  },
+  "postman": {
+    "newman_html_report": true,
+    "newman_html_hide_bodies": [
+      "Login - Requester (becomes Org Admin)",
+      "Login - COS Admin",
+      "Login - Consumer",
+      "Refresh requester token (picks up new roles)"
+    ],
+    "namespace_names": false,
+    "skip_delete_requests": false,
+    "destructive_requests": [
+      "*Deactivate*",
+      "*Revoke*",
+      "*Delete*"
+    ],
+    "default_collection": "controlplane_kt",
+    "collections": {
+      "controlplane": {
+        "enabled": false
+      },
+      "controlplane_kt": {
+        "enabled": true,
+        "collection": "resource/Controlplane_temporary_check_1/DX ControlPlane - Onboarding E2E Copy.postman_collection.json",
+        "environment": "resource/Controlplane_temporary_check_1/DX ControlPlane - Onboarding (template - E2E).postman_environment.json",
+        "variables": {
+          "requester_user": "{{new_user}}",
+          "requester_pass": "{{new_user_pass}}",
+          "org_name_prefix": "{{run_namespace}}-org",
+          "org_manager_email_local": "{{run_namespace}}-manager",
+          "item_name_prefix": "{{run_namespace}}-item",
+          "org_emp_id": "EMP12345"
+        },
+        "own_variables": [
+          "org_name",
+          "org_manager_email",
+          "org_id",
+          "item_id",
+          "item_name",
+          "access_request_id",
+          "policy_id"
+        ]
+      }
+    },
+    "phases": [
+      {
+        "name": "00 users",
+        "type": "script",
+        "step": "create_users"
+      },
+      {
+        "name": "01 controlplane onboarding e2e",
+        "type": "postman",
+        "server": "controlplane",
+        "skip": [
+          "File server*",
+          "OGC*",
+          "Community*",
+          "Sandbox*"
+        ]
+      },
+      {
+        "name": "02 org roles",
+        "type": "script",
+        "step": "await_org_roles"
+      },
+      {
+        "name": "08 item",
+        "type": "script",
+        "step": "create_item"
+      },
+      {
+        "name": "19 policy",
+        "type": "script",
+        "step": "ensure_policy"
+      },
+      {
+        "name": "20 data onboarding",
+        "type": "script",
+        "step": "data_onboarding"
+      },
+      {
+        "name": "21 resource servers",
+        "type": "script",
+        "step": "resource_servers"
+      },
+      {
+        "name": "24 ngsi-ld temporal & entities",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "NGSILD",
+        "required": false
+      },
+      {
+        "name": "25 ngsi-ld latest data",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "Latest Data",
+        "required": false
+      },
+      {
+        "name": "26 ngsi-ld search",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "Search Data",
+        "required": false
+      },
+      {
+        "name": "27 ngsi-ld download",
+        "type": "postman",
+        "server": "ngsild",
+        "collection": "dataplane",
+        "folder": "Download Data",
+        "required": false
+      },
+      {
+        "name": "29 gateway entities search (reference item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "EntitiesSearch",
+        "variables": {
+          "gatewayResourceId": "{{gateway_reference_id}}"
+        },
+        "required": false,
+        "when": "config:resource_servers.gateway.reference_item_id"
+      },
+      {
+        "name": "30 gateway complex search (reference item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "Complex Search",
+        "variables": {
+          "gatewayResourceId": "{{gateway_reference_id}}"
+        },
+        "required": false,
+        "when": "config:resource_servers.gateway.reference_item_id"
+      },
+      {
+        "name": "31 gateway entities search (this run's item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "EntitiesSearch",
+        "variables": {
+          "gatewayResourceId": "{{gateway_item_id}}"
+        },
+        "required": false,
+        "adaptor": "gateway"
+      },
+      {
+        "name": "32 gateway complex search (this run's item)",
+        "type": "postman",
+        "server": "gateway",
+        "collection": "dataplane",
+        "folder": "Complex Search",
+        "variables": {
+          "gatewayResourceId": "{{gateway_item_id}}"
+        },
+        "required": false,
+        "adaptor": "gateway"
+      },
+      {
+        "name": "33 file server read",
+        "type": "postman",
+        "server": "file",
+        "folder": "06",
+        "requests": [
+          "File server*"
+        ],
+        "variables": {
+          "item_id": "{{item_id}}"
+        },
+        "when": "config:resource_servers.file.enabled",
+        "required": false
+      },
+      {
+        "name": "34 ogc stac read",
+        "type": "postman",
+        "server": "ogc",
+        "folder": "06",
+        "requests": [
+          "OGC*"
+        ],
+        "variables": {
+          "item_id": "{{item_id}}"
+        },
+        "when": "config:resource_servers.ogc.enabled",
+        "required": false
+      },
+      {
+        "name": "35 community layer",
+        "type": "postman",
+        "server": "community",
+        "folder": "06",
+        "requests": [
+          "Community*"
+        ],
+        "when": "config:community.enabled",
+        "required": false
+      },
+      {
+        "name": "36 sandbox",
+        "type": "postman",
+        "server": "sandbox",
+        "folder": "06",
+        "requests": [
+          "Sandbox*"
+        ],
+        "when": "config:sandbox.enabled",
+        "required": false
+      },
+      {
+        "name": "22 audit trail",
+        "type": "script",
+        "step": "auditing"
+      }
+    ],
+    "teardown": [
+      {
+        "name": "data plane",
+        "type": "script",
+        "step": "data_plane_cleanup"
+      },
+      {
+        "name": "scripts",
+        "type": "script",
+        "step": "cleanup"
+      }
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "url": "v2.dev.sandbox.iudx.io/api"
+  },
+  "community": {
+    "enabled": true,
+    "url": "v2.dev.iudx.io/community"
+  }
+}

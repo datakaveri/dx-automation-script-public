@@ -1,0 +1,4 @@
+requests>=2.31.0,<3.0.0
+# database_sweep, es_index_sweep (only for postgres.enabled) and the OGC
+# collection sweep talk to Postgres directly.
+psycopg2-binary>=2.9.0,<3.0.0

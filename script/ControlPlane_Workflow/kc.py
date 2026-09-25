@@ -167,6 +167,25 @@ class Keycloak:
     def delete_user(self, user_id, label="user"):
         self._admin("DELETE", f"/users/{user_id}", f"delete {label}", expect=(204,))
 
+    def reset_password(self, user_id, password, label="reset password"):
+        """Put a user's password back to the one the harness holds.
+
+        A suite that exercises the user API changes passwords — PUT
+        /iudx/v2/auth/user/password is one of its own test cases — and it
+        changes them on the accounts the harness created, since those are the
+        accounts it was pointed at. The harness is then holding a credential
+        the account no longer has, and every later sign-in for that persona
+        fails with invalid_grant. Resetting through the Admin API is the only
+        way back: the old password is gone, so the user API cannot be asked.
+        """
+        self._admin(
+            "PUT",
+            f"/users/{user_id}/reset-password",
+            label,
+            json_body={"type": "password", "value": password, "temporary": False},
+            expect=(200, 204),
+        )
+
     def realm_roles(self, user_id):
         """Realm role names currently mapped to the user."""
         mapped = self._admin(

@@ -1,9 +1,193 @@
 # dx-automation-script
 
-End-to-end testing for the DX platform: one command drives the complete
-onboarding workflow against a live deployment — users, organisation, catalogue
-item, access policy, data onboarding, data-plane reads and audit trail — then
-removes everything it created.
+End-to-end testing for the DX platform. The main entry point is
+**`complete-test/complete_test.py`**: it runs the published Postman collections
+through newman against a live deployment — every positive and negative case —
+in an order that leaves a real, working chain behind (users, organisation,
+catalogue item, access policy, data onboarding, data-plane reads, audit trail),
+then removes everything it created.
+
+```bash
+npm install --prefix complete-test
+cp complete-test/config.example.json complete-test/config.json   # then fill it in
+python3 complete-test/complete_test.py
+```
+
+`main/e2e.py` is the older, API-only harness for the same workflow — it calls the
+APIs itself instead of running the collections. It is still here and still
+works; see [main/e2e.py: the API-only harness](#maine2epy-the-api-only-harness).
+
+---
+
+## Requirements
+
+### Runtime
+
+| Tool | Version | Notes |
+|---|---|---|
+| Python | 3.10+ | tested on 3.10.12 |
+| Node.js | 16+ | required by newman; tested on 22.17.1 |
+| npm | any recent | installs newman locally |
+| OS | Linux or macOS | uses process groups (`os.killpg`); on Windows use WSL |
+
+### Node packages
+
+Pinned in `complete-test/package.json` and installed beside the harness, so no
+global install is needed:
+
+```bash
+npm install --prefix complete-test
+# or
+python3 complete-test/complete_test.py --install-newman
+```
+
+| Package | Version |
+|---|---|
+| `newman` | ^6.2.1 |
+| `newman-reporter-htmlextra` | ^1.23.1 |
+
+### Python packages
+
+```bash
+python3 -m pip install "requests>=2.31,<3" "psycopg2-binary>=2.9,<3" pika boto3 aiohttp
+```
+
+| Package | Used for | Needed |
+|---|---|---|
+| `requests` | every API and Keycloak call | always |
+| `psycopg2-binary` | Postgres sweep, OGC vector cleanup | always — imported at startup |
+| `pika` | RabbitMQ: NGSI-LD publish, gateway adaptor and teardown | NGSI-LD or gateway enabled |
+| `boto3` | OGC S3 cleanup | OGC enabled |
+| `aiohttp` | OGC vector onboarding | OGC vector enabled |
+
+### The whole repository
+
+Not just `complete-test/`. The harness imports `script/ControlPlane_Workflow/`,
+`script/sandbox/` and `script/community-layer/`, and runs the scripts under
+`script/NGSILD_Automation_Script/`, `script/GATEWAY_Automation_Script/`,
+`script/OGC_Automation_Script/` and `script/FILE_Automation_Script/` as
+subprocesses.
+
+### Config and inputs
+
+- `complete-test/config.json`, copied from `config.example.json`: hosts,
+  Keycloak admin, RabbitMQ, S3 keys, Postgres, and the paths to certificates,
+  the GeoPackage and upload file. A server or section switched off with
+  `enabled: false` needs none of its settings or packages.
+- The Postman collections under `resource/`. The folder is not tracked in git
+  and has to be shared separately — **the collections hold live credentials;
+  strip them before handing the files on.**
+
+### Network
+
+The machine running it must reach the deployment's APIs, Keycloak, RabbitMQ
+(AMQPS and the management API), S3, and Postgres when `postgres.enabled` is on.
+
+### One run at a time
+
+Two runs from the same checkout share one generated `environment.json` and
+corrupt each other silently. The harness takes a run lock; do not work around
+it.
+
+---
+
+## Running it
+
+```bash
+python3 complete-test/complete_test.py                          # the full run
+python3 complete-test/complete_test.py --list                   # list the phases
+python3 complete-test/complete_test.py --only "00 users,03"     # selected phases
+python3 complete-test/complete_test.py --set run.cleanup=false  # keep the artefacts
+python3 complete-test/complete_test.py --sweep-only             # reap leftovers from a crashed run
+python3 complete-test/complete_test.py --as-shipped             # collections on their own env file, no teardown
+python3 complete-test/complete_test.py --rebuild-reports        # re-render the last run's reports
+python3 complete-test/complete_test.py path/to/other-config.json
+```
+
+Any config key can be overridden with `--set path.to.key=value`.
+
+---
+
+## What a run does
+
+The flow is a list in `complete-test/config.json`, and each entry is one of two
+kinds: a **postman** phase hands a folder to newman, and a **script** phase does
+what no collection can — create the Keycloak accounts, publish to RabbitMQ,
+upload to S3, sweep Postgres. The run report names every gap a script had to
+fill, which is the list of what the next version of a collection could cover.
+
+The same split decides where a value lives: hosts, personas, tokens and every id
+the run produces are generated into a Postman environment; broker credentials,
+S3 keys, the database and local file paths stay in `config.json`. Nothing is
+configured twice. Adding another server's collection is a config edit.
+
+Two collections run today: the control plane's, and the data-plane one covering
+the **NGSI-LD** and **gateway** servers — temporal and entity queries, latest
+data, search, download, app-id auth, and the gateway's entity and complex
+searches. That one tests those endpoints against resource ids of its own, so it
+sits beside the `resource_servers` script phase rather than replacing it: the
+collection says the endpoint is correct, the script says this run's own chain
+is. OGC and the file server have no collection yet.
+
+It writes two reports, both rewritten in place every run:
+`complete-test/reports/complete-test-report.html` for the run, and
+`complete-test/reports/newman-report.html` for every folder newman ran.
+
+Two switches keep a run's artefacts around for inspection —
+`run.cleanup: false` stops teardown, and `postman.skip_delete_requests: true`
+stops the deletes a CRUD folder does during the flow. Both are needed: a folder
+that tests its own delete will otherwise remove the item before you can look at
+it.
+
+The full detail — phase order, teardown, reports, modes, adding a collection —
+is in **[complete-test/README.md](complete-test/README.md)**.
+
+---
+
+## Layout
+
+```
+complete-test/complete_test.py  the entry point — run this
+complete-test/config.json       your deployment + the phase list (gitignored; holds credentials)
+complete-test/config.example.json   the committed template
+complete-test/package.json      newman, pinned
+complete-test/reports/          the run report, and newman's own per folder
+
+resource/                       the published Postman collections under test (untracked)
+
+main/e2e.py                     the API-only harness for the same workflow
+main/config.json                its deployment (gitignored)
+main/config.example.json        its template
+main/reports/                   its HTML reports
+
+script/ControlPlane_Workflow/   the shared harness code (imported as a package)
+script/NGSILD_Automation_Script/    publish + teardown for NGSI-LD
+script/GATEWAY_Automation_Script/   the RPC adaptor + teardown
+script/OGC_Automation_Script/       vector and raster (STAC) pipelines
+script/FILE_Automation_Script/      file upload + deletion
+script/CONTROLPLANE_Cleanup_Script/ each teardown step as a standalone script
+script/sandbox/                     sandbox server checks
+script/community-layer/             community layer checks
+
+docs/sandbox.md                     what the sandbox check covers, and cannot
+docs/community-layer.md             the same for the community layer
+```
+
+The last two servers are checked, never onboarded to, and are separate
+deployments with their own repositories — so their checks sit beside the other
+per-server automation rather than inside the ControlPlane package.
+
+`script/ControlPlane_Workflow/README.md` documents the shared code in depth:
+every config section, why teardown is a prefix sweep, and the platform quirks
+each step works around.
+
+---
+
+## main/e2e.py: the API-only harness
+
+`main/e2e.py` drives the same onboarding workflow by calling the APIs itself,
+without the collections. It is useful when the question is about the platform
+rather than the collections, or where newman is not available.
 
 ```bash
 python3 main/e2e.py
@@ -11,9 +195,7 @@ python3 main/e2e.py
 
 Exit code is 0 only when every phase passed **and** nothing survived teardown.
 
----
-
-## What a run does
+### Its phases
 
 | Phase | What it proves |
 |---|---|
@@ -43,7 +225,7 @@ The harness never reimplements this work: it runs the same scripts in
 `script/*_Automation_Script/` that are used by hand, generating their config per
 run and reading their exit codes and logs.
 
-### Two providers, when NGSI-LD and the gateway are both enabled
+#### Two providers, when NGSI-LD and the gateway are both enabled
 
 The catalogue names the RabbitMQ user it creates after the item's **provider**,
 not after the item. One provider owning both an NGSI-LD item and a gateway one
@@ -60,43 +242,7 @@ access to both items and reads each with its own resource token.
 With only one of the two enabled nothing changes: one provider, one item,
 carrying every enabled server as before.
 
----
-
-## Layout
-
-```
-main/e2e.py                     the entry point — the only thing you run
-main/config.json                your deployment (gitignored; holds credentials)
-main/config.example.json        the committed template
-main/reports/                   HTML reports land here
-
-script/ControlPlane_Workflow/   the harness itself (imported as a package)
-script/NGSILD_Automation_Script/    publish + teardown for NGSI-LD
-script/GATEWAY_Automation_Script/   the RPC adaptor + teardown
-script/OGC_Automation_Script/       vector and raster (STAC) pipelines
-script/FILE_Automation_Script/      file upload + deletion
-script/sandbox/                     sandbox server checks (phase 07)
-script/community-layer/             community layer checks (phase 08)
-script/user_creation/               standalone create/delete scripts per user role
-script/challenge/                   standalone challenge scripts: create, set times, delete
-
-docs/sandbox.md                     what the sandbox check covers, and cannot
-docs/community-layer.md             the same for the community layer
-docs/challenge-scripts.md           runbook for the challenge scripts
-docs/challenge-round-walkthrough.md step-by-step: a full round (create → submit → evaluate → purge) in one sitting
-```
-
-The last two servers are checked, never onboarded to, and are separate
-deployments with their own repositories — so their checks sit beside the other
-per-server automation rather than inside the ControlPlane package.
-
-`script/ControlPlane_Workflow/README.md` documents the harness in depth: every
-config section, why teardown is a prefix sweep, and the platform quirks each
-step works around.
-
----
-
-## Reports
+### Reports
 
 Every run writes a self-contained HTML page listing each request, its status,
 timing and body, alongside the artefacts it created and the teardown result:
@@ -124,7 +270,7 @@ instead, so nothing is overwritten, which is what a scheduled run wants.
 
 ---
 
-## Setup
+### Setup
 
 ```bash
 cp main/config.example.json main/config.json     # then fill it in
@@ -153,12 +299,12 @@ never hold a secret.
 
 ---
 
-## Configuration
+### Configuration
 
 `main/config.json` describes one deployment. Nothing is hardcoded in the
 harness, so pointing at a different stack is a config change and nothing else.
 
-### Connections
+#### Connections
 
 | Section | What it configures |
 |---|---|
@@ -169,7 +315,7 @@ harness, so pointing at a different stack is a config change and nothing else.
 | `ogc_postgres` | The OGC server's own database (`ogc_rs_v2`), shared by both OGC teardowns |
 | `databroker` | RabbitMQ management API, for observing audit publication |
 
-### Who runs the workflow
+#### Who runs the workflow
 
 | Section | What it configures |
 |---|---|
@@ -177,7 +323,7 @@ harness, so pointing at a different stack is a config change and nothing else.
 | `run.prefix` | Namespaces every artefact, and is what teardown sweeps on |
 | `run.user_password`, `run.email_domain` | Credentials and domain for the users each run creates |
 
-### Which servers a run exercises
+#### Which servers a run exercises
 
 `resource_servers` holds the four deployed servers (`ngsild`, `gateway`, `ogc`,
 `file`). Each carries a `url`, a `verify_path` for phase 05, and
@@ -196,7 +342,7 @@ one switch picks the pipeline:
 It derives the item's query types, so the declared type, the onboarding path,
 the read path and the teardown all move together.
 
-### The sandbox server
+#### The sandbox server
 
 `sandbox` is checked, not onboarded to — which is why it is its own config
 section rather than a fifth `resource_servers` entry. The sandbox is a
@@ -240,7 +386,7 @@ caller's Keycloak id, so a run using its own throwaway user would strand all
 three every time. [docs/sandbox.md](docs/sandbox.md) records the full evidence
 and what would have to change.
 
-### The community layer
+#### The community layer
 
 `community` is checked the same way and for the same reason as `sandbox` — it is
 an identity-token API with no per-item route, so it is not a catalogue resource
@@ -267,7 +413,7 @@ on each *authenticated* request and no route deletes a user, so a token would
 leave a row behind per run. [docs/community-layer.md](docs/community-layer.md)
 has the detail, including a live 500 on one public route worth reporting.
 
-### Per-server onboarding and teardown
+#### Per-server onboarding and teardown
 
 | Section | Runs |
 |---|---|
@@ -287,12 +433,13 @@ server is enabled: `ogc_vector.gpkg_path`, `bucket_name`, `region`;
 sensibly — one broker credential, one bucket, one database connection, reused
 across the sections that need them.
 
-### Cleanup
+#### Cleanup
 
 | Key | Effect |
 |---|---|
 | `run.cleanup` | Remove everything the run created (default on) |
 | `run.verify_cleanup` | Re-query afterwards and fail the run if anything survived |
+| `run.unwind_compute_credit` | Before each consumer self-deletes: zero its credit balance through the cos_admin deduct endpoint, and delete the credit and compute requests it owns |
 | `run.sweep_database` | Also delete rows the APIs only soft-delete — policies and access requests |
 | `run.delete_audit_rows` | Sweep this run's audit rows, across all four log tables; a borrowed cos_admin's are swept too, scoped to the run |
 | `run.sweep_older_than_hours` | Age guard for leftovers belonging to other runs sharing the prefix |
@@ -301,3 +448,9 @@ Teardown runs in a `finally` block, so artefacts are removed even when a phase
 fails — which is exactly when leaving them behind hurts most. Data-plane objects
 go first, while the item that names them still exists; `--sweep-only` applies
 the same logic to orphans from a crashed run.
+
+Each teardown step is also a standalone script with its own config, for
+cleaning one thing by hand: the data-plane deletions under
+`script/*_Automation_Script/`, and policies-and-item, every collection DELETE
+endpoint by id, the Keycloak account sweep and the database sweep under
+[`script/CONTROLPLANE_Cleanup_Script/`](script/CONTROLPLANE_Cleanup_Script/README.md).

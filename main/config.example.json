@@ -341,7 +341,7 @@
     "sweep_database": false,
     "sweep_older_than_hours": 0,
     "delete_audit_rows": false,
-    "delete_all_cos_admin_data": true,
+    "delete_all_cos_admin_data": false,
     "audit_timeout_seconds": 60,
     "verify_resource_servers": true,
     "response_preview_chars": 800,
