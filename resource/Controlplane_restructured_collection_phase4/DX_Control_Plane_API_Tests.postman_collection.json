@@ -48111,7 +48111,7 @@
                   "    \"user\": {",
                   "        \"id\": \"b14e811f-b632-461a-8ecf-0e3c23f4f709\",",
                   "        \"name\": {},",
-                  "        \"email\": \"postman-user15@example.com\"",
+                  "        \"email\": \"postman-user13@example.com\"",
                   "    },",
                   "    \"owner\": {",
                   "        \"id\": ownerUserId,",
@@ -48186,7 +48186,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user\": {\n    \"id\": \"{{consumer_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"User\"\n    },\n    \"email\": \"test_user_1@example.com\"\n  },\n  \"owner\": {\n    \"id\": \"{{provider_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"Provider\"\n    },\n    \"email\": \"postman-user13@example.com\"\n  },\n  \"item\": {\n    \"itemId\": \"{{item_id}}\",\n    \"itemType\": \"DATABANK\"\n  }\n}",
+              "raw": "{\n  \"user\": {\n    \"id\": \"{{consumer_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"User\"\n    },\n    \"email\": \"test_user_1@example.com\"\n  },\n  \"owner\": {\n    \"id\": \"{{provider_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"Provider\"\n    },\n    \"email\": \"postman-user15@example.com\"\n  },\n  \"item\": {\n    \"itemId\": \"{{item_id}}\",\n    \"itemType\": \"DATABANK\"\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -48275,7 +48275,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user\": {\n    \"id\": \"{{consumer_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"User\"\n    },\n    \"email\": \"test_user_1@example.com\"\n  },\n  \"owner\": {\n    \"id\": \"{{provider_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"Provider\"\n    },\n    \"email\": \"postman-user13@example.com\"\n  },\n  \"item\": {\n    \"itemId\": \"{{item_id}}\",\n    \"itemType\": \"DATABANK\"\n  }\n}",
+              "raw": "{\n  \"user\": {\n    \"id\": \"{{consumer_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"User\"\n    },\n    \"email\": \"test_user_1@example.com\"\n  },\n  \"owner\": {\n    \"id\": \"{{provider_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"Provider\"\n    },\n    \"email\": \"postman-user15@example.com\"\n  },\n  \"item\": {\n    \"itemId\": \"{{item_id}}\",\n    \"itemType\": \"DATABANK\"\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -48321,7 +48321,7 @@
                   "    \"user\": {",
                   "        \"id\": \"b14e811f-b632-461a-8ecf-0e3c23f4f709\",",
                   "        \"name\": {},",
-                  "        \"email\": \"postman-user15@example.com\"",
+                  "        \"email\": \"postman-user13@example.com\"",
                   "    },",
                   "    \"owner\": {",
                   "        \"id\": ownerUserId,",
@@ -48399,7 +48399,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user\": {\n    \"id\": \"{{consumer_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"User\"\n    },\n    \"email\": \"test_user_1@example.com\"\n  },\n  \"owner\": {\n    \"id\": \"{{provider_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"Provider\"\n    },\n    \"email\": \"postman-user13@example.com\"\n  },\n  \"item\": {\n    \"itemId\": \"{{item_id}}\",\n    \"itemType\": \"DATABANK\"\n  }\n}",
+              "raw": "{\n  \"user\": {\n    \"id\": \"{{consumer_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"User\"\n    },\n    \"email\": \"test_user_1@example.com\"\n  },\n  \"owner\": {\n    \"id\": \"{{provider_user_id}}\",\n    \"name\": {\n      \"firstName\": \"Test\",\n      \"lastName\": \"Provider\"\n    },\n    \"email\": \"postman-user15@example.com\"\n  },\n  \"item\": {\n    \"itemId\": \"{{item_id}}\",\n    \"itemType\": \"DATABANK\"\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"

@@ -168,9 +168,13 @@ script/FILE_Automation_Script/      file upload + deletion
 script/CONTROLPLANE_Cleanup_Script/ each teardown step as a standalone script
 script/sandbox/                     sandbox server checks
 script/community-layer/             community layer checks
+script/user_creation/               standalone create/delete scripts per user role
+script/challenge/                   standalone challenge scripts: create, set times, delete
 
 docs/sandbox.md                     what the sandbox check covers, and cannot
 docs/community-layer.md             the same for the community layer
+docs/challenge-scripts.md           runbook for the challenge scripts
+docs/challenge-round-walkthrough.md step-by-step: a full round (create → submit → evaluate → purge) in one sitting
 ```
 
 The last two servers are checked, never onboarded to, and are separate
