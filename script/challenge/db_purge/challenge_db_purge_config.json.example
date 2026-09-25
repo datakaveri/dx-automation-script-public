@@ -1,0 +1,53 @@
+{
+  "postgres": {
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "<database>",
+    "schema": "tgdx_dev",
+    "user": "<db-user>",
+    "password": "${CHALLENGE_PG_PASS:-}",
+    "sslmode": "require",
+    "connect_timeout_seconds": 10
+  },
+  "target": {
+    "competition_id": "",
+    "title": "",
+    "input_file": "../creation/challenge_created.json",
+    "submissions_file": "../submission/submissions_created.json",
+    "require_input_file": false
+  },
+  "purge": {
+    "require_title_prefix": "e2e-",
+    "allowed_statuses": [],
+    "challenge": true,
+    "users": "created",
+    "verify_after": true,
+    "remove_files": [
+      "../creation/challenge_created.json",
+      "../submission/submissions_created.json",
+      "../evaluation/submissions_evaluated.json"
+    ]
+  },
+  "tables": {
+    "competitions": "competitions",
+    "users": "users",
+    "skip": []
+  },
+  "columns": {
+    "competition_id": "id",
+    "title": "title",
+    "status": "status",
+    "child_competition_id": "competition_id",
+    "user_id": "id",
+    "child_user_id": "user_id",
+    "user_email": "email"
+  },
+  "time_format": {
+    "timezone": "Asia/Kolkata"
+  },
+  "logging": {
+    "level": "INFO",
+    "print_sql": true,
+    "mask_secrets": false
+  }
+}

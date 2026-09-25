@@ -1,0 +1,32 @@
+{
+  "base_url": "https://v2.dev.iudx.io/files-connect-api",
+  "api_version": "v1",
+  "token": "",
+  "keycloak": {
+    "token_url": "https://v2.dev.iudx.io/auth/realms/iudx-v2/protocol/openid-connect/token",
+    "client_id": "angular-client",
+    "client_secret": "",
+    "username": "<username>",
+    "password": "<password>"
+  },
+  "verify_tls": true,
+  "request_timeout_seconds": 120,
+  "max_retries": 3,
+  "part_size_mb": 100,
+  "databank_id": "ff2ee34b-61a0-4881-afa3-f6f2d0e66911",
+  "processing": {
+    "enabled": true,
+    "type": "all",
+    "include_uploaded_files_only": false,
+    "wait_for_completion": true,
+    "poll_interval_seconds": 5,
+    "timeout_seconds": 3600
+  },
+  "files": [
+    {
+      "file_path": "script/FILE_Automation_Script/creation/postman-upload.csv",
+      "key": "postman-uploaded.csv",
+      "content_type": "text/csv"
+    }
+  ]
+}

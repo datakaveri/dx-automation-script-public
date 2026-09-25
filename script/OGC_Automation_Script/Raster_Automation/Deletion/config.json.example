@@ -1,0 +1,8 @@
+{
+  "api_base": "https://v2.dev.iudx.io/geoserver-s3/stac/collections",
+  "token": "<provider-token>",
+  "collection_id": "<collection_id>",
+  "batch_size": 100,
+  "delete_delay": 0.2,
+  "request_timeout": 60
+}

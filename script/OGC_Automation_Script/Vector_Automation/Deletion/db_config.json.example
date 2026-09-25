@@ -1,0 +1,8 @@
+{
+  "host": "v2.dev.iudx.io",
+  "port": 5432,
+  "database": "ogc_rs_v2",
+  "databaseUser": "<db-user>",
+  "databasePassword": "<db-password>",
+  "record_id": "<item-id>"
+}

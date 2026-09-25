@@ -1,0 +1,20 @@
+{
+  "base_url": "https://v2.dev.iudx.io/files-connect-api",
+  "api_version": "v1",
+  "token": "",
+  "keycloak": {
+    "token_url": "https://v2.dev.iudx.io/auth/realms/iudx-v2/protocol/openid-connect/token",
+    "client_id": "angular-client",
+    "client_secret": "",
+    "username": "<username>",
+    "password": "<password>"
+  },
+  "verify_tls": true,
+  "request_timeout_seconds": 120,
+  "databank_id": "ff2ee34b-61a0-4881-afa3-f6f2d0e66911",
+  "files": [
+    {
+      "key": "postman-uploaded.csv"
+    }
+  ]
+}

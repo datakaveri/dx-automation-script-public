@@ -1,0 +1,93 @@
+{
+  "community": {
+    "base_url": "https://<community-host>/community",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "user_client_id": "<public-client-id>",
+    "user_client_secret": "",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "cos_admin": {
+    "username": "<cos-admin-username>",
+    "password": "${COS_ADMIN_PASS:-}",
+    "token": ""
+  },
+  "target": {
+    "competition_id": "",
+    "title": "",
+    "submissions_file": "../submission/submissions_created.json",
+    "input_file": "../creation/challenge_created.json",
+    "require_input_file": false
+  },
+  "lookup": {
+    "choices": [
+      "published",
+      "evaluation",
+      "completed",
+      "draft",
+      "scheduled"
+    ],
+    "page_size": 100,
+    "max_pages": 20,
+    "use_query": false
+  },
+  "evaluate": {
+    "which": "all",
+    "submission_ids": [],
+    "skip_scored": true,
+    "score": {
+      "mode": "random",
+      "fixed": 80,
+      "min": 50,
+      "max": 100,
+      "step": 5,
+      "list": [],
+      "decimals": 1
+    },
+    "comments_template": "Scored {score} by dx-automation-script.",
+    "disqualify": false,
+    "expect_http_status": [
+      200
+    ],
+    "verify_after": true,
+    "pause_seconds": 0
+  },
+  "announce": {
+    "enabled": false,
+    "expect_http_status": [
+      200
+    ],
+    "expect_status": "COMPLETED"
+  },
+  "list": {
+    "page_size": 100,
+    "max_pages": 20
+  },
+  "endpoints": {
+    "kc_token": "/realms/{realm}/protocol/openid-connect/token",
+    "admin_get": "/challenge/admin/challenge/{competition_id}",
+    "admin_list": "/challenge/admin/challenges/{choice}",
+    "admin_submissions": "/challenge/admin/challenges/{competition_id}/submissions",
+    "evaluate": "/challenge/admin/submission/{submission_id}/evaluate",
+    "announce": "/challenge/admin/challenges/announce-result"
+  },
+  "time_format": {
+    "timezone": "Asia/Kolkata"
+  },
+  "output": {
+    "enabled": true,
+    "file": "submissions_evaluated.json"
+  },
+  "logging": {
+    "level": "INFO",
+    "print_requests": true,
+    "print_responses": true,
+    "response_preview_chars": 2000,
+    "mask_secrets": false
+  }
+}

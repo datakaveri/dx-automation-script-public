@@ -1,0 +1,8 @@
+{
+  "bucket": "<bucket_name>",
+  "region": "<bucket-region>",
+  "aws_access_key_id": "",
+  "aws_secret_access_key": "",
+  "directory": "script/OGC_Automation_Script/Raster_Automation/5ddcbdd8-3040-48f3-9a0c-5916c0c0d3be"
+}
+

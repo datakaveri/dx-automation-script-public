@@ -1,0 +1,34 @@
+{
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "admin_client_id": "<admin-client-id>",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "target": {
+    "input_file": "../submission/submissions_created.json",
+    "require_input_file": true
+  },
+  "delete": {
+    "created_accounts": true,
+    "configured_accounts": false,
+    "missing_ok": true,
+    "verify_after": true,
+    "remove_input_file": true,
+    "pause_seconds": 0
+  },
+  "endpoints": {
+    "kc_token": "/realms/{realm}/protocol/openid-connect/token",
+    "kc_users": "/admin/realms/{realm}/users",
+    "kc_user": "/admin/realms/{realm}/users/{user_id}"
+  },
+  "logging": {
+    "level": "INFO",
+    "print_requests": true,
+    "print_responses": true,
+    "response_preview_chars": 2000,
+    "mask_secrets": false
+  }
+}

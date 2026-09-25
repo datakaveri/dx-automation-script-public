@@ -1,0 +1,29 @@
+# Local configuration — copy the .example file and fill in real values.
+# Never commit these: they hold credentials, tokens and machine-local paths.
+config.json
+db_config.json
+# …and the ones that do not use that exact name. These start as placeholders,
+# which is precisely why they get filled in with real credentials later.
+*_config.json
+
+# Logs written by the automation scripts
+*.log
+
+# IDE project directories. JetBrains writes a project-local copy of files you
+# open, so this can end up holding a duplicate of a config that is ignored
+# everywhere else.
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Handoff records written by script/user_creation/<role>/creation and
+# script/challenge/{creation,submission,evaluation} and consumed by the
+# matching deletion / cleanup script. The user ones name a real account and,
+# unless the config says otherwise, carry its password.
+*_created.json
+*_evaluated.json

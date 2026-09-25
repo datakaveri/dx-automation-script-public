@@ -1,0 +1,107 @@
+{
+  "community": {
+    "base_url": "https://v2.dev.iudx.io/community",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "keycloak": {
+    "url": "https://v2.dev.iudx.io/auth",
+    "realm": "iudx-v2",
+    "user_client_id": "frontend-client",
+    "user_client_secret": "",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "cos_admin": {
+    "username": "${COS_ADMIN_USER:-cos-admin@example.com}",
+    "password": "${COS_ADMIN_PASS}",
+    "token": ""
+  },
+  "challenge": {
+    "draft": true,
+    "title": "",
+    "title_prefix": "e2e-challenge",
+    "title_template": "{prefix}-{timestamp}-{random}",
+    "timestamp_format": "%Y%m%d%H%M%S",
+    "random_hex_bytes": 2,
+    "subtitle": "Automation-created challenge",
+    "overview": "Created by dx-automation-script; safe to delete.",
+    "description": "This challenge was created by an automation script to exercise the community layer's challenge APIs.",
+    "image_url": null,
+    "constraints": "None.",
+    "evaluation_criteria_definition": "Highest score wins.",
+    "submission_file_definition": "A single CSV file.",
+    "other_resources": null,
+    "prize_type": "CASH",
+    "total_pool_amount": 10000,
+    "currency": "INR",
+    "prize_pool_description": "INR 10,000 total: 5,000 / 3,000 / 2,000 for the top three submissions.",
+    "rules_and_guidelines": null,
+    "dataset_description": "No dataset.",
+    "data_models": [],
+    "ai_models": null,
+    "additional_assets": null,
+    "extra_fields": {}
+  },
+  "uploads": {
+    "enabled": true,
+    "rules_and_guidelines_file": "sample_rules_and_guidelines.md",
+    "image_file": "",
+    "additional_asset_files": [],
+    "content_type": "application/octet-stream",
+    "timeout_seconds": 120
+  },
+  "times": {
+    "creation": "today",
+    "submission_start": "today",
+    "submission_end": "today+14d",
+    "evaluation_end": "today+21d"
+  },
+  "time_format": {
+    "timezone": "Asia/Kolkata",
+    "date_formats": [
+      "%Y-%m-%d",
+      "%d-%m-%Y",
+      "%d/%m/%Y",
+      "%Y-%m-%dT%H:%M:%S%z",
+      "%Y-%m-%d %H:%M",
+      "%Y-%m-%dT%H:%M:%S",
+      "%Y-%m-%d %H:%M:%S"
+    ],
+    "send_date_format": "%Y-%m-%d",
+    "send_datetime_format": "iso"
+  },
+  "validate": {
+    "mode": "auto",
+    "starts_not_before_publish": true,
+    "ends_after_starts": true,
+    "evaluation_after_ends": true
+  },
+  "create": {
+    "omit_null_fields": true,
+    "expect_http_status": [
+      200,
+      201
+    ],
+    "verify_after": true,
+    "expect_status": "",
+    "settle_seconds": 0
+  },
+  "endpoints": {
+    "kc_token": "/realms/{realm}/protocol/openid-connect/token",
+    "admin_create": "/challenge/admin/challenge",
+    "admin_get": "/challenge/admin/challenge/{competition_id}",
+    "attachment": "/challenge/attachment"
+  },
+  "output": {
+    "enabled": true,
+    "file": "challenge_created.json"
+  },
+  "logging": {
+    "level": "INFO",
+    "print_requests": true,
+    "print_responses": true,
+    "response_preview_chars": 2000,
+    "mask_secrets": false
+  }
+}
