@@ -1,0 +1,45 @@
+{
+  "control_plane": {
+    "base_url": "https://<controlplane-host>",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "acl": {
+    "base_url": ""
+  },
+  "keycloak": {
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "user_client_id": "postman-client",
+    "user_client_secret": "",
+    "admin_client_id": "",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "owner": {
+    "username": "<provider-username>",
+    "password": "${PROVIDER_PASS:-}",
+    "token": ""
+  },
+  "target": {
+    "item_ids": [
+      "<item-id>"
+    ],
+    "name_prefix": ""
+  },
+  "sweep": {
+    "enabled": false,
+    "username_prefix": "e2e-",
+    "password": "${SWEEP_USER_PASS:-}",
+    "protected_usernames": [],
+    "provider_role": "provider"
+  },
+  "delete": {
+    "deactivate_policies": true,
+    "verify": true
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

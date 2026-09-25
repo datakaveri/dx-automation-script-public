@@ -127,6 +127,77 @@ class rabbitmqServer:
     def ack(self, method):
         self.channel.basic_ack(delivery_tag=method.delivery_tag)
 
+# ============================================================
+# SAMPLE RECORDS
+#
+# Used when [api] url is blank. Shaped like the CSC dataset the
+# published data-plane collection was written against, which is
+# what a gateway item on dev answers with:
+#
+#   {"CSCID": "...", "District": "PUNE", "Sub_District": "...",
+#    "Longitude": "...", "Latitude": "...", "Pincode": "..."}
+#
+# `District` is the field that matters. The collection's gateway
+# folders both filter on `q=District==PUNE` and then assert
+# `item.District.toUpperCase() === "PUNE"` on every row returned.
+# Answering with records that have no District at all - which any
+# generic public API does - makes that assertion throw rather than
+# fail, and the folder reports a broken gateway when the gateway
+# is fine and only the payload is wrong.
+#
+# Every row is PUNE on purpose: this adaptor does not read the
+# query (the incoming message is a trigger, and the body is never
+# parsed), so it cannot filter. A dataset that is entirely PUNE is
+# the only way an unfiltered reply can satisfy a "every row
+# matches the filter" assertion honestly.
+# ============================================================
+SAMPLE_RECORDS = [
+    {
+        "CSCID": "110630330014",
+        "District": "PUNE",
+        "Sub_District": "Haveli",
+        "Longitude": "73.80367520000004",
+        "Latitude": "18.5165691"
+    },
+    {
+        "CSCID": "110998660010",
+        "Address": "OPP POLICE STATION ALANDI DEVACHI KHED PUNE-412105",
+        "District": "PUNE",
+        "Sub_District": "Khed",
+        "Longitude": "73.89889850891495",
+        "Latitude": "18.676115247275774",
+        "Pincode": "412105"
+    },
+    {
+        "CSCID": "111127710015",
+        "Address": "Tandalimalwadi",
+        "District": "PUNE",
+        "Sub_District": "Shirur",
+        "Longitude": "74.57274913787843",
+        "Latitude": "18.54911478093504",
+        "Pincode": "412211"
+    },
+    {
+        "CSCID": "111352370017",
+        "Address": "AP- TANDALI",
+        "District": "PUNE",
+        "Sub_District": "Shirur",
+        "Longitude": "73.85674369999992",
+        "Latitude": "18.5204303",
+        "Pincode": "412211"
+    },
+    {
+        "CSCID": "111478920021",
+        "Address": "NEAR GRAMPANCHAYAT OFFICE",
+        "District": "PUNE",
+        "Sub_District": "Maval",
+        "Longitude": "73.51234500000001",
+        "Latitude": "18.7512340",
+        "Pincode": "410506"
+    }
+]
+
+
 # -------------------------------------------------
 # Dummy API Worker (test harness)
 # Incoming message is a TRIGGER ONLY - body is not parsed or used.
@@ -137,9 +208,30 @@ class rabbitmqServer:
 # -------------------------------------------------
 class DummyUsersLookup:
 
-    def __init__(self, api_url, results_key):
+    def __init__(self, api_url, results_key, data_file=None):
         self.api_url = api_url
         self.results_key = results_key
+        self.records = self.load_records(data_file)
+
+    # -------------------------------------------------
+    # Records from a JSON file, when one is configured.
+    # A bad file is fatal at startup rather than at the
+    # first request: an adaptor that answers every call
+    # with an error is worse than one that never starts.
+    # -------------------------------------------------
+    @staticmethod
+    def load_records(path):
+        if not (path or "").strip():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError) as error:
+            sys.exit(f"ERROR: could not read api.data_file {path}: {error}")
+        if not isinstance(data, list):
+            sys.exit(f"ERROR: api.data_file {path} must hold a JSON array of objects")
+        logging.info(f"......Loaded {len(data)} record(s) from {path}......")
+        return data
 
     # -------------------------------------------------
     # Single place that builds the error shape, so the
@@ -193,6 +285,22 @@ class DummyUsersLookup:
     # Call API and build the results array
     # -------------------------------------------------
     def getData(self):
+
+        # A configured dataset wins over an upstream: it is the deliberate
+        # answer, and re-reading it per request would only add a way to fail.
+        if self.records is not None:
+            return {"results": list(self.records)}
+
+        # No upstream and no dataset: answer with the built-in records. That is
+        # the default for the test harness, because what the collection asserts
+        # on is the shape of the reply, and a public API that happens to be
+        # reachable today is not a fixture.
+        if not (self.api_url or "").strip():
+            logging.info(
+                f"......No api.url configured; "
+                f"answering with {len(SAMPLE_RECORDS)} built-in record(s)......"
+            )
+            return {"results": list(SAMPLE_RECORDS)}
 
         try:
             api_response = requests.get(self.api_url, timeout=30)
@@ -255,7 +363,8 @@ if __name__ == "__main__":
 
     worker = DummyUsersLookup(
         api_url=config["api"]["url"],
-        results_key=config["api"]["results_key"]
+        results_key=config["api"]["results_key"],
+        data_file=config["api"].get("data_file", "")
     )
 
     server = rabbitmqServer(server_config)

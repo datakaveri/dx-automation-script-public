@@ -31,7 +31,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
-from .client import ApiClient, field, rows_of, scrub
+from .client import ApiClient, ApiError, field, rows_of, scrub
 from . import gateway_adaptor
 from .file_server import file_upload
 from .ogc_raster import ogc_raster_create
@@ -234,6 +234,11 @@ class RunContext:
                 )
             )
 
+        # The observationDateTime range phase 04 published into, as
+        # (start, end). None until it has. The data-plane collections put it
+        # straight into a `timerel=between` query, so what the publisher wrote
+        # and what a temporal query asks for cannot drift apart.
+        self.ngsild_window = None
         # Set when OGC onboarding fails, so teardown can leave the wreckage for
         # inspection instead of deleting the evidence.
         self.ogc_onboarding_failed = False
@@ -530,14 +535,7 @@ def _create_item(ctx, lane):
 
     # Only cos_admin may set publishStatus (ItemController.java:352). Visibility
     # needs ACTIVE *and* dataUploadStatus true, hence the mediaURL above.
-    ctx.cp.patch(
-        "/iudx/v2/cat/item",
-        f"publish item (cos admin){lane.suffix}",
-        token=ctx.cos_admin_token,
-        params={"id": lane.item_id},
-        json_body={"publishStatus": "ACTIVE"},
-    )
-    _log("published ACTIVE")
+    _publish_item(ctx, lane)
 
     document = ctx.cp.get(
         "/iudx/v2/cat/item",
@@ -604,6 +602,43 @@ def declared_servers(payload):
 def declared_server_types(entries):
     """Just the type strings from `declared_servers` output."""
     return [entry["type"] for entry in entries or []]
+
+
+def _publish_item(ctx, lane, attempts=5, interval=2):
+    """Set publishStatus ACTIVE, retrying while the index says the item is not
+    there yet.
+
+    `_await_item_indexed` above already waited for a read to find it, and that
+    is usually enough — but read and write take different paths into
+    Elasticsearch, and a run on 2026-09-10 had the read succeed on its first
+    attempt and the patch answer `404 Item not found for update` a moment later.
+    Waiting longer before the first try would cost every run; retrying the write
+    costs only the run that hits the race.
+
+    Anything other than that 404 is raised on the first attempt: a 401 or a 400
+    is not a race, and retrying it would only bury the message.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            ctx.cp.patch(
+                "/iudx/v2/cat/item",
+                f"publish item (cos admin){lane.suffix}",
+                token=ctx.cos_admin_token,
+                params={"id": lane.item_id},
+                json_body={"publishStatus": "ACTIVE"},
+            )
+        except ApiError as err:
+            not_indexed = err.status == 404 and attempt < attempts
+            if not not_indexed:
+                raise
+            _log(
+                f"the write path cannot see {lane.item_id} yet "
+                f"(attempt {attempt}/{attempts}) — waiting {interval}s"
+            )
+            time.sleep(interval)
+            continue
+        _log("published ACTIVE" + (f" after {attempt} attempt(s)" if attempt > 1 else ""))
+        return
 
 
 def _await_item_indexed(ctx, lane, timeout=ITEM_INDEX_TIMEOUT, interval=2):
@@ -683,7 +718,7 @@ def _request_access(ctx, lane):
     lane.access_request_id = _find_access_request_id(ctx, lane)
     _log(f"provider sees request {lane.access_request_id}")
 
-    expiry = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    expiry = _access_expiry(ctx)
     ctx.acl.put(
         "/iudx/acl/apd/v2/access_request",
         f"approve access request (provider){lane.suffix}",
@@ -708,6 +743,18 @@ def _request_access(ctx, lane):
         pid for pid in (field(p, "policyId", "id", "_id") for p in ours) if pid
     ]
     _log(f"policy verified ({len(ours)} row(s))")
+
+
+def _access_expiry(ctx):
+    """When a granted access request expires, as the API wants it written.
+
+    Config-driven because the length matters to more than the reads: a
+    subscription may not outlive the policy behind it, so a policy granted for
+    a day makes every subscription request the collections send fail with
+    "expiryAt cannot be greater than policyExpiry".
+    """
+    days = ctx.config["run"]["access_expiry_days"]
+    return (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _find_access_request_id(ctx, lane):

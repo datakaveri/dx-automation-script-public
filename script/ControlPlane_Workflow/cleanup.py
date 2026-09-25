@@ -12,6 +12,8 @@ it, so failures are collected and reported at the end.
 
 import os
 import re
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from .client import field, rows_of, try_delete
 from .config import (
@@ -198,6 +200,11 @@ SWEEP_STATEMENTS = [
         "WHERE user_id = ANY(%(user_ids)s::text[])",
     ),
     (
+        "access_rule_allowed_org",
+        "DELETE FROM {schema}.access_rule_allowed_org "
+        "WHERE org_id = ANY(%(org_ids)s::text[])",
+    ),
+    (
         "access_rule",
         "DELETE FROM {schema}.access_rule "
         "WHERE owner_id = ANY(%(user_ids)s::uuid[]) OR item_id = ANY(%(item_ids)s::uuid[])",
@@ -205,9 +212,10 @@ SWEEP_STATEMENTS = [
     (
         "policy",
         "DELETE FROM {schema}.policy "
-         "WHERE owner_id = ANY(%(user_ids)s::uuid[]) "
+        "WHERE owner_id = ANY(%(user_ids)s::uuid[]) "
         "OR consumer_id = ANY(%(user_ids)s::uuid[]) "
-        "OR item_id = ANY(%(item_ids)s::uuid[])",
+        "OR item_id = ANY(%(item_ids)s::uuid[]) "
+        "OR item_organization_id = ANY(%(org_ids)s::uuid[])",
     ),
     (
         "request_messages",
@@ -217,7 +225,9 @@ SWEEP_STATEMENTS = [
         "request",
         "DELETE FROM {schema}.request "
         "WHERE consumer_email_id LIKE %(pattern)s "
-        "OR provider_id = ANY(%(user_ids)s::uuid[]) OR consumer_id = ANY(%(user_ids)s::uuid[])",
+        "OR provider_id = ANY(%(user_ids)s::uuid[]) OR consumer_id = ANY(%(user_ids)s::uuid[]) "
+        "OR consumer_organization_id = ANY(%(org_ids)s::uuid[]) "
+        "OR item_organization_id = ANY(%(org_ids)s::uuid[])",
     ),
     (
         "client_credentials",
@@ -236,12 +246,30 @@ SWEEP_STATEMENTS = [
     (
         "asset_visibility_snapshot",
         "DELETE FROM {schema}.asset_visibility_snapshot "
-        "WHERE provider_id = ANY(%(user_ids)s::uuid[]) OR asset_id = ANY(%(item_ids)s::uuid[])",
+        "WHERE provider_id = ANY(%(user_ids)s::uuid[]) OR asset_id = ANY(%(item_ids)s::uuid[]) "
+        "OR organization_id = ANY(%(org_ids)s::uuid[])",
     ),
     (
         "provider_requests",
         "DELETE FROM {schema}.provider_requests "
         "WHERE organization_id = ANY(%(org_ids)s::uuid[]) OR user_id = ANY(%(user_ids)s::uuid[])",
+    ),
+    # The request row carries no organisation id — approval copies its name
+    # into organizations and writes the requester as the org's admin, and
+    # nothing links the two afterwards. An org known only by id reaches its
+    # request through either: the name, until PUT /organisations/{id} renames
+    # the org (the collection does, every run); or the admin membership, whose
+    # user_id is the request's requested_by. Both lookups need their rows still
+    # there, so this runs before organization_users and organizations. Nothing
+    # references this table, so it can go first.
+    (
+        "organization_create_requests",
+        "DELETE FROM {schema}.organization_create_requests "
+        "WHERE name LIKE %(pattern)s OR requested_by = ANY(%(user_ids)s::uuid[]) "
+        "OR name IN (SELECT name FROM {schema}.organizations "
+        "WHERE id = ANY(%(org_ids)s::uuid[])) "
+        "OR requested_by IN (SELECT user_id FROM {schema}.organization_users "
+        "WHERE organization_id = ANY(%(org_ids)s::uuid[]) AND role = 'admin')",
     ),
     (
         "organization_join_requests",
@@ -254,12 +282,19 @@ SWEEP_STATEMENTS = [
         "WHERE organization_id = ANY(%(org_ids)s::uuid[]) OR user_id = ANY(%(user_ids)s::uuid[])",
     ),
     (
-        "organization_create_requests",
-        "DELETE FROM {schema}.organization_create_requests "
-        "WHERE name LIKE %(pattern)s OR requested_by = ANY(%(user_ids)s::uuid[])",
+        "organizations",
+        "DELETE FROM {schema}.organizations "
+        "WHERE name LIKE %(pattern)s OR id = ANY(%(org_ids)s::uuid[])",
     ),
-    ("organizations", "DELETE FROM {schema}.organizations WHERE name LIKE %(pattern)s"),
-    ("user_table", "DELETE FROM {schema}.user_table WHERE email_id LIKE %(pattern)s"),
+    # By id as well as by email: user_ids is resolved from Keycloak (minus the
+    # protected accounts) before anything is deleted, and a caller that has
+    # only an id — org_admin_deletion, database_sweep's target.user_ids — has
+    # no email to match on.
+    (
+        "user_table",
+        "DELETE FROM {schema}.user_table "
+        "WHERE email_id LIKE %(pattern)s OR _id = ANY(%(user_ids)s::uuid[])",
+    ),
 ]
 
 # Append-only by design. Swept only when run.delete_audit_rows is on, which
@@ -267,23 +302,36 @@ SWEEP_STATEMENTS = [
 #
 # The run's own users are namespaced, so every row they own is this run's and
 # the account id alone is scope enough.
+#
+# Every row also names the organisation it was made in or against, so an
+# organisation swept by id takes its history with it — the only way to reach
+# rows written by an account that is not in user_ids (a borrowed admin, a user
+# already deleted) about this run's org.
 AUDIT_SWEEP_STATEMENTS = [
     (
         "user_activity_audit_log",
         "DELETE FROM {schema}.user_activity_audit_log "
-        "WHERE user_id = ANY(%(user_ids)s::uuid[])",
+        "WHERE user_id = ANY(%(user_ids)s::uuid[]) "
+        "OR org_id = ANY(%(org_ids)s::uuid[]) OR asset_org_id = ANY(%(org_ids)s::uuid[])",
     ),
-    # The same rows in the live table the UI reads, and in the backup copy.
+    # The platform keeps a copy of the table above; same rows, same keys.
+    (
+        "user_activity_audit_log_backup",
+        "DELETE FROM {schema}.user_activity_audit_log_backup "
+        "WHERE user_id = ANY(%(user_ids)s::uuid[]) "
+        "OR org_id = ANY(%(org_ids)s::uuid[]) OR asset_org_id = ANY(%(org_ids)s::uuid[])",
+    ),
+    # The live table the UI reads.
     (
         "user_activity_log",
         "DELETE FROM {schema}.user_activity_log "
-        "WHERE user_id = ANY(%(user_ids)s::uuid[])",
+        "WHERE user_id = ANY(%(user_ids)s::uuid[]) OR org_id = ANY(%(org_ids)s::uuid[])",
     ),
     # A second, separate audit table — not a view over the one above.
     (
         "activity_audit_log",
         "DELETE FROM {schema}.activity_audit_log "
-        "WHERE user_id = ANY(%(user_ids)s::uuid[])",
+        "WHERE user_id = ANY(%(user_ids)s::uuid[]) OR org_id = ANY(%(org_ids)s::uuid[])",
     ),
 ]
 
@@ -713,6 +761,44 @@ VERIFY_STATEMENTS = [
         "OR consumer_id IN "
         "(SELECT _id FROM {schema}.user_table WHERE email_id LIKE %(pattern)s)",
     ),
+    # The compute/credit rows a granted compute role leaves behind. No endpoint
+    # removes them — a granted credit request will not delete, and deducting a
+    # balance to zero only writes one more transaction — so a run that went
+    # through the compute journey and was verified without these read clean
+    # while they were still there.
+    #
+    # compute_role is the one with a namespaced column of its own, and it is
+    # also the one that matters most: compute_role.user_id is UNIQUE, so a
+    # surviving row means that account can never request the compute role
+    # again.
+    (
+        "compute_role",
+        "SELECT count(*) FROM {schema}.compute_role WHERE user_name LIKE %(pattern)s",
+    ),
+    # The rest key on a user id alone, so they are checked through the users
+    # that reference them — the same weaker check as policy above: once those
+    # users are gone this reads zero regardless, and the sweep is what
+    # guarantees the rows went.
+    (
+        "credit_requests",
+        "SELECT count(*) FROM {schema}.credit_requests WHERE user_id IN "
+        "(SELECT _id FROM {schema}.user_table WHERE email_id LIKE %(pattern)s)",
+    ),
+    (
+        "credit_transactions",
+        "SELECT count(*) FROM {schema}.credit_transactions WHERE user_id IN "
+        "(SELECT _id FROM {schema}.user_table WHERE email_id LIKE %(pattern)s)",
+    ),
+    (
+        "user_credits",
+        "SELECT count(*) FROM {schema}.user_credits WHERE user_id IN "
+        "(SELECT _id FROM {schema}.user_table WHERE email_id LIKE %(pattern)s)",
+    ),
+    (
+        "kyc_transactions",
+        "SELECT count(*) FROM {schema}.kyc_transactions WHERE user_id IN "
+        "(SELECT _id FROM {schema}.user_table WHERE email_id LIKE %(pattern)s)",
+    ),
 ]
 
 
@@ -800,8 +886,32 @@ def _cos_admin_ids(ctx):
     return [str(borrowed)] if borrowed else []
 
 
-def teardown(ctx):
-    """Remove everything this run created. Returns a list of problem strings."""
+def teardown(ctx, stage="all"):
+    """Remove everything this run created. Returns a list of problem strings.
+
+    `stage` splits the work at the one point where order is not negotiable:
+
+        data_plane  the broker, S3 and OGC objects — everything that is named
+                    after the catalogue item and becomes unreachable once the
+                    item is gone
+        platform    the item itself, its policies, the consumers and the org —
+                    everything that still needs an account to call an API as
+        accounts    the Keycloak users and the database sweep — the point of no
+                    return, after which nothing can be signed in as
+        all         the three in that order — what `main/e2e.py` wants
+
+    The split exists because a harness may have work of its own at each seam.
+    The complete-test harness runs the collection's own `DELETE /cat/item`
+    before `platform`, so that the published request is the one under test —
+    and the data-plane objects have to be gone before that happens, or the file
+    server, the STAC store and the OGC tables are all asked about a databank
+    that no longer exists and every one of them fails.
+
+    The second seam is there for the same kind of reason. Sweeping catalogue
+    items means signing in as each namespaced account to ask what it owns, so
+    it has to happen while those accounts still exist — which is to say before
+    `accounts`, not after it.
+    """
     problems = []
     config = ctx.config
 
@@ -809,25 +919,43 @@ def teardown(ctx):
         print("    cleanup disabled — leaving artefacts in place")
         return problems
 
-    user_ids = _resolve_user_ids(ctx, problems)
+    if stage in ("all", "data_plane"):
+        # Before the item: the exchange and queue are named with the item id,
+        # and these objects are only reachable while something still names them.
+        _teardown_ngsild(ctx, problems)
+        _teardown_gateway(ctx, problems)
+        _teardown_file(ctx, problems)
+        _teardown_ogc_raster(ctx, problems)
+        _teardown_ogc_vector(ctx, problems)
+        _teardown_ogc_s3(ctx, problems)
 
-    # Before the item: the exchange and queue are named with the item id, and
-    # these objects are only reachable while something still names them.
-    _teardown_ngsild(ctx, problems)
-    _teardown_gateway(ctx, problems)
-    _teardown_file(ctx, problems)
-    _teardown_ogc_raster(ctx, problems)
-    _teardown_ogc_vector(ctx, problems)
-    _teardown_ogc_s3(ctx, problems)
+    if stage in ("all", "platform"):
+        # Ahead of every deletion, and stashed rather than passed: the consumer
+        # self-delete below already cascades into Keycloak, so resolving this
+        # any later loses the ids it removed. `accounts` reads what is stashed
+        # here, which is what keeps the two stages equivalent to one call.
+        ctx.swept_user_ids = _resolve_user_ids(ctx, problems)
 
-    _teardown_policies(ctx, problems)
-    _teardown_item(ctx, problems)
-    _teardown_consumers(ctx, problems)
-    _teardown_organisation(ctx, problems)
-    _teardown_keycloak_users(ctx, problems)
+        _teardown_policies(ctx, problems)
+        _teardown_item(ctx, problems)
+        # Before the self-delete: every endpoint below is read and called as the
+        # account itself, and the balance is keyed on a user id the cascade
+        # takes with it.
+        _teardown_compute_credit(ctx, problems)
+        _teardown_consumers(ctx, problems)
+        _teardown_organisation(ctx, problems)
 
-    if config["run"]["sweep_database"]:
-        _sweep_database(ctx, problems, user_ids)
+    if stage in ("all", "accounts"):
+        # Only resolved here when `platform` was skipped — a caller running the
+        # accounts stage alone, with nothing deleted yet for it to have missed.
+        user_ids = getattr(ctx, "swept_user_ids", None)
+        if user_ids is None:
+            user_ids = _resolve_user_ids(ctx, problems)
+
+        _teardown_keycloak_users(ctx, problems)
+
+        if config["run"]["sweep_database"]:
+            _sweep_database(ctx, problems, user_ids)
 
     return problems
 
@@ -1081,6 +1209,16 @@ def _sweep_catalogue_items(ctx, problems):
     """
     prefix = ctx.config["run"]["prefix"]
     password = ctx.config["run"]["user_password"]
+    # A run whose password one of its own accounts had changed under it holds
+    # the working one on the user rather than in the config — see
+    # CompleteTestContext._recover_password. Preferring it keeps the sweep able
+    # to sign in as that account; the configured password still covers every
+    # account left behind by an earlier run.
+    known = {
+        u.username.lower(): u.password
+        for u in ctx.users.values()
+        if getattr(u, "username", None) and getattr(u, "password", None)
+    }
 
     try:
         users = ctx.kc.find_users_by_prefix(prefix)
@@ -1095,11 +1233,23 @@ def _sweep_catalogue_items(ctx, problems):
             print(f"    protected account, assets left alone: {username}")
             continue
         try:
-            token = ctx.kc.user_token(username, password)
+            token = ctx.kc.user_token(username, known.get(username.lower(), password))
         except Exception:  # noqa: BLE001
-            # Left by a run that used a different password — nothing we can do
-            # through the API, and the Keycloak sweep will still remove the user.
-            problems.append(f"could not sign in as {username} to find its assets")
+            # The password is not the one this harness set. Either an older run
+            # used a different one, or a collection under test changed it —
+            # PUT /auth/user/password is one of its own test cases.
+            #
+            # Only a provider can own a catalogue item, so for anyone else there
+            # is provably nothing here to find and the failed sign-in is not
+            # worth reporting as a problem. The Keycloak sweep removes the
+            # account either way.
+            if not _may_own_items(ctx, user):
+                print(f"    cannot sign in as {username}; it owns no assets, so nothing to sweep")
+                continue
+            problems.append(
+                f"could not sign in as {username} to find its assets — it is a "
+                f"provider, so any item it owns is left behind"
+            )
             continue
 
         try:
@@ -1129,6 +1279,19 @@ def _sweep_catalogue_items(ctx, problems):
             handled.add(str(item_id))
 
     return handled
+
+
+def _may_own_items(ctx, user):
+    """Whether an account could own a catalogue item at all.
+
+    Items are created by providers, so an account without the provider role has
+    none — which turns "could not sign in to list its assets" from a gap in the
+    sweep into a step that had nothing to do.
+    """
+    try:
+        return ctx.config["keycloak"]["roles"]["provider"] in ctx.kc.realm_roles(user["id"])
+    except Exception:  # noqa: BLE001 - unknown means assume it might
+        return True
 
 
 def _delete_item_with_policies(ctx, token, item_id, name, problems):
@@ -1210,19 +1373,41 @@ def _teardown_policies(ctx, problems):
 
     The API only soft-deletes — the row stays with status DELETE for
     traceability — so the database sweep is what finally removes it.
+
+    A policy that is already inactive is not a problem to report. The
+    complete-test harness gives the collection's own deactivate request the
+    first go, so by the time this runs the policy may already be down, and the
+    API answers that with 400 "policy is not ACTIVE". The outcome wanted here is
+    an inactive policy, and it is inactive.
     """
     for lane in ctx.lanes:
         for policy_id in _policy_ids_for_item(ctx, lane, problems):
+            already_down = []
             try_delete(
-                lambda pid=policy_id, owner=lane.provider: ctx.acl.put(
-                    "/iudx/acl/apd/v2/policy",
-                    f"delete policy {pid}",
-                    token=owner.token,
-                    params={"id": pid},
+                lambda pid=policy_id, owner=lane.provider, seen=already_down: (
+                    _deactivate_policy(ctx, pid, owner, seen)
                 ),
                 f"delete policy {policy_id}",
                 problems,
             )
+
+
+def _deactivate_policy(ctx, policy_id, owner, seen):
+    """Deactivate one policy, treating "already inactive" as done."""
+    try:
+        ctx.acl.put(
+            "/iudx/acl/apd/v2/policy",
+            f"delete policy {policy_id}",
+            token=owner.token,
+            params={"id": policy_id},
+            expect=(200,),
+        )
+    except Exception as err:  # noqa: BLE001 - inspected, then re-raised
+        if "not ACTIVE" in str(err):
+            seen.append(policy_id)
+            print(f"    policy {policy_id} was already deactivated")
+            return
+        raise
 
 
 def _teardown_ngsild(ctx, problems):
@@ -1552,9 +1737,19 @@ def _run_gateway_teardown(ctx, queue, broker_user, problems):
 
 
 def _run_ngsild_teardown(ctx, item_id, broker_user, problems):
-    """Delete one item's index, exchange and broker user."""
+    """Delete one item's index, exchange and broker user.
+
+    Retried once, because the failure this actually sees is a management API
+    call that hung until its timeout — thirty seconds against a broker that
+    answers the same request in a fraction of a second when asked again. The
+    script is safe to repeat: an object that is already gone is not a failure to
+    it, so a second pass either finishes the job or confirms the first one did.
+    """
     print(f"    ngsi-ld teardown: exchange {item_id}, broker user {broker_user}")
     result = ngsild_delete(ctx, item_id, broker_user)
+    if not result.ok:
+        print("    ngsi-ld teardown did not complete; trying once more")
+        result = ngsild_delete(ctx, item_id, broker_user)
     if not result.ok:
         problems.append(
             f"ngsi-ld teardown exited {result.code} ({result.meaning}) for "
@@ -1644,6 +1839,14 @@ def _sweep_broker_objects(ctx, row, item_id, broker_user, problems, owner_token=
 
 
 def _teardown_item(ctx, problems):
+    """Delete each lane's catalogue item.
+
+    404 counts as success. A collection may have deleted the item already — the
+    complete-test harness gives the collection's own DELETE the first go, since
+    running the published request is worth more than repeating it by hand — and
+    an item that is gone is the outcome this wanted either way. Treating it as a
+    failure would report a problem for work that was done correctly.
+    """
     for lane in ctx.lanes:
         if not lane.item_id:
             continue
@@ -1653,10 +1856,150 @@ def _teardown_item(ctx, problems):
                 f"delete catalogue item{l.suffix}",
                 token=l.provider.token,
                 params={"id": l.item_id},
+                expect=(200, 404),
             ),
             f"delete item {lane.item_id}",
             problems,
         )
+
+
+def _teardown_compute_credit(ctx, problems):
+    """Unwind the credit and compute state the 05/06 folders leave on a consumer.
+
+    The collection's own teardown folders delete a credit or compute request by
+    the id the flow captured, and they are enough while that request is still
+    pending. This covers the three things they cannot do:
+
+      * the **balance**. `PUT /admin/user/credit/add` has an exact inverse in
+        `/deduct` — same body, same cos_admin token — and nothing else on the
+        platform will bring a balance back to zero.
+      * a request the flow **approved**. `DELETE /user/credit/request/{id}`
+        answers 400 "Only pending credit requests can be deleted", so the
+        granted ones the 05/06 folders created are still there.
+      * anything raised **outside** the ids the flow captured — a second credit
+        request, or a run that died before `capture` ran.
+
+    None of it is recorded as a teardown problem: a granted request refusing to
+    delete is the platform behaving as documented, and the rows go with the
+    database sweep either way. What the run does print is the `compute_role`
+    row, because that one outlives the account in a way that matters —
+    `compute_role.user_id` is UNIQUE, so a surviving row means that account can
+    never request the compute role again.
+    """
+    if not ctx.config["run"].get("unwind_compute_credit", True):
+        return
+
+    for key in ("consumer", "nopolicy"):
+        user = ctx.user(key)
+        if not user.token:
+            continue
+        _zero_credit_balance(ctx, user, problems)
+        _delete_own_requests(
+            ctx, user, problems, "credit request", "/iudx/v2/auth/user/credit/request"
+        )
+        _delete_own_requests(
+            ctx, user, problems, "compute request", "/iudx/v2/auth/user/compute/requests"
+        )
+
+
+def _credit_balance(ctx, user):
+    """The account's own balance, or None when the endpoint is not there."""
+    payload = ctx.cp.get(
+        "/iudx/v2/auth/user/credit/balance", f"credit balance of {user.key}",
+        token=user.token, expect=(200, 403, 404),
+    )
+    balance = payload.get("balance") if isinstance(payload, dict) else None
+    return float(balance) if isinstance(balance, (int, float)) else None
+
+
+def _zero_credit_balance(ctx, user, problems):
+    """Deduct the whole balance as the cos_admin.
+
+    `requested_at` is the platform's idempotency key — the same
+    (user, amount, requested_at) twice answers 409 Duplicate transaction
+    request — so a retry uses a later second rather than repeating the call.
+    """
+    try:
+        balance = _credit_balance(ctx, user)
+    except Exception as err:  # noqa: BLE001 - teardown never propagates
+        problems.append(f"read credit balance of {user.username}: {err}")
+        return
+    if not balance or balance <= 0:
+        return
+    if not ctx.cos_admin_token or not user.user_id:
+        print(f"    credit balance of {user.key} is {balance} — no cos_admin to deduct it")
+        return
+
+    for attempt in range(2):
+        moment = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=attempt)
+        body = {
+            "user_id": user.user_id,
+            "amount": balance,
+            "requested_at": moment.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        try:
+            result = ctx.cp.put(
+                "/iudx/v2/auth/admin/user/credit/deduct", f"deduct {balance} from {user.key}",
+                token=ctx.cos_admin_token, json_body=body, expect=(200, 409),
+            )
+        except Exception as err:  # noqa: BLE001 - teardown never propagates
+            problems.append(f"deduct {balance} from {user.username}: {err}")
+            return
+        updated = result.get("updatedBalance") if isinstance(result, dict) else None
+        if updated is not None:
+            print(f"    deducted {balance} from {user.key} (balance now {updated})")
+            return
+        # 409: the platform already has this (user, amount, requested_at). The
+        # next second is a different transaction, so the retry is the fix.
+    print(f"    could not deduct {balance} from {user.key}: duplicate transaction")
+
+
+def _delete_own_requests(ctx, user, problems, label, list_path):
+    """Delete every credit/compute request the account owns that will delete.
+
+    The listing is the account's own, so it needs no admin rights and it finds
+    what the flow never captured. A 400 is the platform refusing to delete
+    anything but a pending request — printed, not recorded as a problem.
+    """
+    try:
+        payload = ctx.cp.get(
+            list_path, f"own {label}s of {user.key}", token=user.token,
+            params={"page": 1, "size": 50, "sort": "createdAt", "status": ""},
+            expect=(200, 403, 404),
+        )
+    except Exception as err:  # noqa: BLE001 - teardown never propagates
+        problems.append(f"list {label}s of {user.username}: {err}")
+        return
+
+    # The compute endpoint answers with one object — compute_role.user_id is
+    # UNIQUE — where the credit endpoint answers with a list.
+    rows = rows_of(payload)
+    if not rows and isinstance(payload, dict) and payload.get("id"):
+        rows = [payload]
+
+    for row in rows:
+        request_id = row.get("id")
+        status = row.get("status", "?")
+        if not request_id:
+            continue
+        try:
+            response = ctx.cp.delete(
+                f"{list_path}/{quote(str(request_id))}",
+                f"delete {label} {request_id}", token=user.token,
+                expect=(200, 204, 400, 403, 404),
+            )
+        except Exception as err:  # noqa: BLE001 - teardown never propagates
+            problems.append(f"delete {label} {request_id}: {err}")
+            continue
+        # A refusal keeps its envelope, so it still carries a title; a success
+        # is unwrapped to its result, or says "Success" when it has none.
+        title = response.get("title") if isinstance(response, dict) else None
+        if title and title != "Success":
+            detail = response.get("detail") or title
+            print(f"    {label} {request_id} ({status}) not deleted — {detail}; "
+                  f"the row goes with the database sweep")
+        else:
+            print(f"    deleted {label} {request_id} ({status})")
 
 
 def _teardown_consumers(ctx, problems):
@@ -1823,6 +2166,19 @@ def _wraps_all(clause):
     return False
 
 
+def render_sql(cursor, sql, params):
+    """The statement as the server will see it, values bound — for the log.
+
+    psycopg2's mogrify does the substitution client-side without running
+    anything; on any other driver the template is returned as written.
+    """
+    try:
+        rendered = cursor.mogrify(sql, params)
+    except Exception:  # noqa: BLE001 - logging must never break the sweep
+        return sql
+    return rendered.decode() if isinstance(rendered, bytes) else str(rendered)
+
+
 def _schema_columns(cursor, schema):
     """{table: {column, ...}} for one schema, or None if it cannot be read."""
     try:
@@ -1976,6 +2332,8 @@ def verify(ctx):
     except Exception as err:  # noqa: BLE001
         survivors.append(f"could not verify Keycloak: {err}")
 
+    _verify_broker(ctx, survivors)
+
     if not ctx.config["postgres"]["enabled"]:
         return survivors
 
@@ -2008,6 +2366,52 @@ def verify(ctx):
 
     return survivors
 
+
+def _verify_broker(ctx, survivors):
+    """Assert the broker objects went too.
+
+    Keycloak and Postgres were the whole of this check for a long time, and that
+    made "nothing survived" a claim about half the platform: the exchange, the
+    queue and the RabbitMQ user the catalogue creates live nowhere near either.
+    A teardown step that timed out could therefore leave a broker user behind
+    and the run would still report a clean bill of health — which is exactly
+    what happened once, and is worse than not checking at all, because the
+    report said the opposite of the truth.
+    """
+    import requests
+
+    delete = ctx.config["ngsild_delete"]
+    publish = ctx.config["ngsild_publish"]
+    databroker = ctx.config["databroker"]
+
+    def either(key):
+        return delete.get(key) or publish.get(key) or databroker.get(key)
+
+    mgmt = delete.get("mgmt_url") or ctx.config["gateway_delete"].get("mgmt_url")
+    username, password = either("username"), either("password")
+    if not (mgmt and username and password):
+        return
+    vhost = delete.get("vhost") or publish.get("vhost")
+
+    def gone(path, what):
+        try:
+            response = requests.get(
+                f"{mgmt.rstrip('/')}/{path}", auth=(username, password), timeout=20
+            )
+        except Exception as err:  # noqa: BLE001 - an unreachable broker is not a survivor
+            survivors.append(f"could not verify {what}: {err}")
+            return
+        if response.status_code == 200:
+            survivors.append(what)
+
+    for lane in ctx.lanes:
+        if lane.item_id and vhost:
+            quoted = quote(vhost, safe="")
+            gone(f"api/exchanges/{quoted}/{lane.item_id}", f"rabbitmq exchange {lane.item_id}")
+            gone(f"api/queues/{quoted}/{lane.item_id}", f"rabbitmq queue {lane.item_id}")
+        provider_id = getattr(lane.provider, "user_id", None)
+        if provider_id:
+            gone(f"api/users/{provider_id}", f"rabbitmq user {provider_id}")
 
 def _connect(config):
     import psycopg2

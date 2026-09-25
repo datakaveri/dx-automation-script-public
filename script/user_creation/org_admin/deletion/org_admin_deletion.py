@@ -20,14 +20,20 @@ the organisation — including the admin's own row, which the platform will not
 remove. Clearing the organisation therefore means going to the database, which
 is what `delete.organisation_mode: "postgres"` and the `postgres` block do.
 
-The database side is off until `postgres.enabled` is true. It deletes only rows
-keyed on this account's id and this organisation's id, it prunes tables and
-columns the deployment does not have, and `postgres.dry_run` (or `--pg-dry-run`)
-prints the statements instead of running them. Point it at a test deployment.
+The database side is off until `postgres.enabled` is true. It runs the
+harness's own sweep — SWEEP_STATEMENTS in script/ControlPlane_Workflow/
+cleanup.py, imported rather than copied — with this account's id and this
+organisation's id as the only anchors, so every table the platform keys on a
+user or an organisation is cleared: memberships, requests, policies, credits,
+credentials, leaderboards, the organisation row, the user_table row. Tables and
+columns the deployment does not have are pruned first, and `postgres.dry_run`
+(or `--pg-dry-run`) runs every statement inside a transaction that is rolled
+back, so the row counts it prints are real. Point it at a test deployment.
+`postgres.audit_rows` adds the append-only activity log tables.
 
-Everything else — URLs, credentials, endpoint paths, which route to take, which
-tables to clear — comes from the JSON config. Values may reference the
-environment as ${VAR} or ${VAR:-fallback}.
+Everything else — URLs, credentials, endpoint paths, which route to take —
+comes from the JSON config. Values may reference the environment as ${VAR} or
+${VAR:-fallback}.
 """
 
 from __future__ import annotations
@@ -53,6 +59,16 @@ try:
     import psycopg2
 except ModuleNotFoundError:  # Only needed when the postgres cleanup is enabled.
     psycopg2 = None  # type: ignore[assignment]
+
+# The sweep is the harness's, so a table added there is cleared here too.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from ControlPlane_Workflow.cleanup import (  # noqa: E402
+    AUDIT_SWEEP_STATEMENTS,
+    SWEEP_STATEMENTS,
+    _adapt_to_schema,
+    _schema_columns,
+    render_sql,
+)
 
 
 LOG = logging.getLogger("org_admin_deletion")
@@ -96,8 +112,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # row exists — worth doing only to see the platform's answer.
         # none: leave the organisation in place.
         "organisation_mode": "postgres",
-        # Clear the rows keyed on the account itself (its membership, its join,
-        # provider and organisation-create requests).
+        # Clear every row keyed on the account itself — its membership, its
+        # requests, policies, credits, credentials, its user_table row.
         "database_cleanup": True,
         "pause_seconds": 0,
         "verify": True,
@@ -115,24 +131,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "password": "",
         "sslmode": "require",
         "connect_timeout_seconds": 10,
-        # Rows keyed on the account, cleared before the organisation itself.
-        "user_tables": [
-            {"table": "organization_users", "column": "user_id"},
-            {"table": "organization_join_requests", "column": "user_id"},
-            {"table": "provider_requests", "column": "user_id"},
-            {"table": "organization_create_requests", "column": "requested_by"},
-            # Present only when the account was created with compute.enabled.
-            # user_id is UNIQUE there, so this is at most one row.
-            {"table": "compute_role", "column": "user_id"},
-        ],
-        # Rows keyed on the organisation, in foreign-key order — organizations
-        # last, since every other table references it.
-        "org_tables": [
-            {"table": "provider_requests", "column": "organization_id"},
-            {"table": "organization_join_requests", "column": "organization_id"},
-            {"table": "organization_users", "column": "organization_id"},
-            {"table": "organizations", "column": "id"},
-        ],
+        # Also clear the activity/audit log rows the account and the
+        # organisation left. Append-only on the platform side; a stack you own.
+        "audit_rows": False,
     },
     "endpoints": {
         "kc_token": "/realms/{realm}/protocol/openid-connect/token",
@@ -852,55 +853,77 @@ def pg_connect(config: dict[str, Any]):
     )
 
 
-def existing_columns(cursor, schema: str) -> set[tuple[str, str]]:
-    """Every (table, column) the deployment actually has.
+def sweep_rows(config: dict[str, Any], user_id: str, org_id: str) -> None:
+    """Run the harness sweep anchored on this account and this organisation.
 
-    Deployments drift: a table or a column named in the config may simply not be
-    there, and one statement naming a missing column would abort the rest of the
-    cleanup with it.
+    Every other anchor — the name prefix, item ids, the cos_admin — is made
+    unmatchable, so the only rows that can go are the ones naming this user id
+    or this organisation id. Statements are children-before-parents already;
+    tables and columns absent on this deployment are pruned, never guessed at.
     """
-    cursor.execute(
-        "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = %s",
-        (schema,),
-    )
-    return {(row[0], row[1]) for row in cursor.fetchall()}
-
-
-def sweep_rows(
-    config: dict[str, Any], targets: list[dict[str, Any]], value: str, label: str
-) -> None:
-    """Delete the rows matching one id, table by table, skipping what is absent."""
     pg = config["postgres"]
     if not pg.get("enabled", False):
-        LOG.info("postgres.enabled is false — leaving the %s rows in place", label)
+        LOG.info("postgres.enabled is false — leaving the database rows in place")
         return
-    if not value:
-        LOG.info("No %s id to clean up", label)
+    if not user_id and not org_id:
+        LOG.info("No user or organisation id to clean up")
         return
+    if pg.get("user_tables") or pg.get("org_tables"):
+        LOG.info("postgres.user_tables / org_tables are no longer read — the harness sweep "
+                 "covers every table keyed on a user or an organisation")
 
     schema = str(pg.get("schema") or "public")
     dry_run = bool(pg.get("dry_run", False))
+    anchors = {
+        "pattern": f"zz-{secrets.token_hex(8)}",  # a literal with no wildcard: matches only itself
+        "user_ids": [user_id] if user_id else [],
+        "org_ids": [org_id] if org_id else [],
+        "item_ids": [],
+        "cos_admin_ids": [],
+    }
+    statements = list(SWEEP_STATEMENTS)
+    if pg.get("audit_rows", False):
+        statements = list(AUDIT_SWEEP_STATEMENTS) + statements
+
     connection = pg_connect(config)
+    total = 0
     try:
-        with connection, connection.cursor() as cursor:
-            present = existing_columns(cursor, schema)
-            for target in targets:
-                table = str(target.get("table") or "")
-                column = str(target.get("column") or "")
-                if not table or not column:
-                    LOG.warning("Skipping malformed postgres target %r", target)
-                    continue
-                if (table, column) not in present:
-                    LOG.info("Skipping %s.%s — not on this deployment", table, column)
-                    continue
-                statement = f'DELETE FROM "{schema}"."{table}" WHERE "{column}" = %s'
+        with connection.cursor() as cursor:
+            columns = _schema_columns(cursor, schema)
+            for table, template in statements:
+                statement = template.format(schema=schema)
+                if columns is not None:
+                    statement, dropped = _adapt_to_schema(statement, schema, columns)
+                    if statement is None:
+                        LOG.debug("Skipping %s — not on this deployment", table)
+                        continue
+                    if dropped:
+                        LOG.info("%s: no %s column on this deployment, matched on the rest",
+                                 table, ", ".join(sorted(set(dropped))))
+                LOG.info("SQL: %s", render_sql(cursor, statement, anchors))
                 if dry_run:
-                    LOG.info("Would run: %s  [%s]", statement, value)
-                    continue
-                cursor.execute(statement, (value,))
-                LOG.info("Deleted %d row(s) from %s.%s", cursor.rowcount, schema, table)
+                    cursor.execute("SAVEPOINT stmt")
+                try:
+                    cursor.execute(statement, anchors)
+                    LOG.info("  -> %s %d row(s) from %s.%s",
+                             "Would delete" if dry_run else "Deleted", cursor.rowcount, schema, table)
+                    if cursor.rowcount:
+                        total += cursor.rowcount
+                    if dry_run:
+                        cursor.execute("RELEASE SAVEPOINT stmt")
+                    else:
+                        connection.commit()
+                except Exception as exc:  # noqa: BLE001 - one failed table must not stop the rest
+                    if dry_run:
+                        cursor.execute("ROLLBACK TO SAVEPOINT stmt")
+                    else:
+                        connection.rollback()
+                    LOG.error("%s.%s: %s", schema, table, exc)
+        if dry_run:
+            connection.rollback()
     finally:
         connection.close()
+    LOG.info("%s: %d row(s) in total", "Dry run" if dry_run else "Database", total)
 
 
 # -------------------------------------------------------------------- steps
@@ -987,14 +1010,14 @@ def delete_org_admin(
     verify_gone(config, kc, target["username"])
 
     # The account is gone from Keycloak; its rows are not, and neither is the
-    # organisation. Both are cleared here when the config allows it.
-    if delete.get("database_cleanup", True):
-        sweep_rows(config, config["postgres"].get("user_tables") or [],
-                   target.get("user_id") or "", "user")
+    # organisation. Both are cleared here when the config allows it — in one
+    # pass, since the sweep orders the tables children-before-parents.
+    sweep_user = target.get("user_id") or "" if delete.get("database_cleanup", True) else ""
+    sweep_org = org_id if org_mode == "postgres" else ""
+    if sweep_user or sweep_org:
+        sweep_rows(config, sweep_user, sweep_org)
 
-    if org_mode == "postgres":
-        sweep_rows(config, config["postgres"].get("org_tables") or [], org_id, "organisation")
-    elif org_id and org_mode == "none":
+    if org_id and org_mode == "none":
         LOG.info("Leaving organisation %s in place (delete.organisation_mode is 'none')", org_id)
     elif org_id and org_mode == "api":
         LOG.warning("Organisation %s is still there — clear it with "

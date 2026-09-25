@@ -1,0 +1,9 @@
+{
+  "name": "dx-complete-test",
+  "private": true,
+  "description": "newman, used by complete_test.py. Installed locally so a run does not depend on a global newman. The combined HTML report is built by the harness from newman's JSON output; newman-reporter-htmlextra is the per-phase report newman writes itself, switched on with postman.newman_html_report.",
+  "dependencies": {
+    "newman": "^6.2.1",
+    "newman-reporter-htmlextra": "^1.23.1"
+  }
+}

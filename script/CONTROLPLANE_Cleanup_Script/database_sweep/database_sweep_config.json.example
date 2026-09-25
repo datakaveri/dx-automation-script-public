@@ -1,0 +1,36 @@
+{
+  "postgres": {
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "<database>",
+    "schema": "aaa",
+    "user": "<db-user>",
+    "password": "${PG_PASS:-}",
+    "sslmode": "prefer",
+    "connect_timeout_seconds": 10
+  },
+  "keycloak": {
+    "url": "",
+    "realm": "",
+    "admin_client_id": "",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "target": {
+    "prefix": "e2e-",
+    "user_ids": [],
+    "org_ids": [],
+    "item_ids": [],
+    "protected_user_ids": [],
+    "cos_admin_id": ""
+  },
+  "sweep": {
+    "delete_audit_rows": false,
+    "delete_all_cos_admin_data": false,
+    "verify": true
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

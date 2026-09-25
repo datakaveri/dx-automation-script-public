@@ -139,7 +139,20 @@ DEFAULTS = {
             "url": None,
             "verify_path": None,
             "access_types": ["api"],
-            "query_types": ["ATTR"],
+            # Declared on the catalogue item, and what the resource server will
+            # answer for. TEMPORAL is here because the data-plane collection's
+            # temporal folder is: without it the server refuses a
+            # `timerel=between` query on this run's item whatever the data says.
+            "query_types": ["ATTR", "TEMPORAL"],
+            # An item that already exists on the deployment, with data behind it
+            # and whatever attributes a collection filters on. Published as
+            # `<key>_reference_id`, and a phase pointed at it is asking "does
+            # this endpoint work" — a different question from "does this run's
+            # chain work", and worth asking separately: a run whose own item is
+            # empty then says the endpoint is healthy and the chain is not,
+            # rather than failing once for both reasons at the same time. Null
+            # skips the phases that read it.
+            "reference_item_id": None,
             "dataset_type": "DATASET",
             # What the no-policy token must get. An endpoint that serves public
             # metadata cannot refuse anyone, so an empty list means "this path
@@ -154,7 +167,11 @@ DEFAULTS = {
             "url": None,
             "verify_path": None,
             "access_types": ["api"],
-            "query_types": ["ATTR"],
+            "query_types": ["ATTR", "TEMPORAL"],
+            # The gateway resource the published collection was written against
+            # — see the NGSI-LD entry above. Filled in by the config that names
+            # the collection file, because it belongs to that deployment.
+            "reference_item_id": None,
             "dataset_type": "DATASET",
             "expect_denied": [401, 403],
             "enabled": True,
@@ -256,7 +273,42 @@ DEFAULTS = {
         "data_file": None,
         # Publish this many packets, cycling the source records; null publishes
         # each record once.
-        "count": None,
+        #
+        # It has to exceed the largest page any folder asks for: `Latest Data`'s
+        # positive case asks for `size=10` and asserts `result.length === 10`, so
+        # a dataset of nine rows fails a working endpoint.
+        #
+        # Double that if the `timeRel`/`time`/`endTime` params in `Latest Data`
+        # and `Download Data` are ever enabled again — they are disabled in the
+        # collection today. `time` then lands mid-data (see observation_window),
+        # either reading of it selects about half the rows, and half still has to
+        # fill a page.
+        "count": 24,
+        # Spread observationDateTime evenly over this many hours, ending now,
+        # instead of stamping every record with the same instant. 0 restores the
+        # old behaviour.
+        #
+        # This is what makes a temporal query mean something. `timerel=between`
+        # asks which records fall inside a window, and a dataset whose rows all
+        # share one timestamp cannot answer it — the window holds all of them or
+        # none, so a broken filter and a working one look identical. The window
+        # the run publishes into is handed to the collections as
+        # data_window_start / data_window_end, so the query and the data cannot
+        # drift apart.
+        "spread_hours": 24,
+        # Where the newest record sits. **Null means now**, which is the right
+        # answer whenever every date a collection compares against is one the
+        # harness can retarget.
+        #
+        # It exists for the case where one is not. A test script that names a
+        # date is asserting about it, so it is never rewritten (see
+        # retarget_collection) — and data stamped outside the era such an
+        # assertion expects then fails a test about a query that worked
+        # perfectly. Anchoring the publish is the way to satisfy that without
+        # editing the collection. The data-plane collection needed this briefly
+        # in 2026-09 and no longer does; the knob stays because the next
+        # collection may.
+        "observation_end": None,
         # Pass --verbose to the publisher and echo its whole log.
         "verbose": False,
         # Pause after a confirmed publish. The broker confirming a message is
@@ -296,11 +348,29 @@ DEFAULTS = {
         # The queue the catalogue created for the item. null uses the item id,
         # which is what it is named.
         "queue_name": None,
-        # The upstream the adaptor answers with. The default is the public
-        # dummy API the script ships with: the point of the phase is that the
-        # gateway path carries a reply, not what the reply contains.
-        "api_url": "https://dummyjson.com/users",
+        # The upstream the adaptor answers with. **Null by default**, which
+        # makes it answer from its own SAMPLE_RECORDS.
+        #
+        # It used to default to https://dummyjson.com/users, on the reasoning
+        # that the point of the phase is that the gateway path carries a reply
+        # and not what the reply contains. The published collection's gateway
+        # folders disagree: they filter `q=District==PUNE` and then assert
+        # `item.District.toUpperCase() === "PUNE"` on every row. Users from a
+        # generic API have no District, so that assertion throws and the folder
+        # reports a broken gateway when only the payload was wrong. The
+        # built-in records are shaped like the CSC dataset a gateway item on
+        # dev answers with, so the same folder tests the same thing here.
+        #
+        # Point this at a real upstream to test one; the reply has to carry
+        # whatever the collection filters on.
+        "api_url": None,
         "results_key": "users",
+        # A JSON array of records to answer with, overriding both the upstream
+        # and the built-in ones. Relative paths resolve like `script` above.
+        # This is the knob to reach for when a collection filters on a field the
+        # built-in records do not carry: the adaptor cannot filter, so the
+        # dataset has to be one where every row already matches.
+        "data_file": None,
         # How long to let it attach to the queue before the first call.
         "startup_seconds": 2,
         "verbose": False,
@@ -710,6 +780,11 @@ DEFAULTS = {
         "cleanup": True,
         # Re-query after teardown and fail the run if anything survived.
         "verify_cleanup": True,
+        # Before each consumer self-deletes: zero its credit balance through the
+        # cos_admin deduct endpoint, and delete the credit and compute requests
+        # it owns. The collection's 05/06 teardown folders only reach the ids
+        # the flow captured, and only while those requests are still pending.
+        "unwind_compute_credit": True,
         # Delete residual rows the APIs leave behind (granted org-create
         # requests, and orphans from crashed runs). Needs postgres.enabled.
         "sweep_database": False,
@@ -744,6 +819,12 @@ DEFAULTS = {
         "delete_all_cos_admin_data": False,
         # How long to wait for async audit propagation (RMQ -> consumer -> ES).
         "audit_timeout_seconds": 60,
+        # How long a granted access request lasts. A day is plenty to read the
+        # data plane with, which is all `main/e2e.py` does with it. Raise it for
+        # a suite that subscribes: the platform refuses a subscription whose
+        # expiry is later than the policy's ("expiryAt cannot be greater than
+        # policyExpiry"), and collections tend to ask for a date years out.
+        "access_expiry_days": 1,
         # Whether phase 04 calls the data-plane servers. Turn this off to run
         # ControlPlane and ACL standalone: onboarding, catalogue, access request
         # and policy all still run and are verified, and no resource server is
@@ -768,6 +849,462 @@ DEFAULTS = {
         # while iterating, and what you do not want on a nightly schedule where
         # yesterday's failure is the thing you need to read.
         "report_file": None,
+    },
+    # ------------------------------------------------------------- postman
+    # The complete-test harness (complete-test/complete_test.py) drives the
+    # published Postman collections through newman instead of calling the APIs
+    # itself, so the suite the QA team maintains is the suite that runs.
+    #
+    # The division of labour is the whole point of this section: anything a
+    # collection can carry is written into the *generated* Postman environment
+    # at run time — hosts, personas, passwords, tokens, and every id the flow
+    # produces. What a collection cannot carry lives in the sections above:
+    # RabbitMQ, S3, Postgres, Keycloak's admin client, and the local file paths
+    # the data-plane scripts upload from. Nothing is duplicated between them.
+    "postman": {
+        # Does newman run at all? Off leaves the flow intact — the script phases
+        # still build and tear down the chain — and skips every postman phase by
+        # name, the teardown DELETE folders with them, and the newman reports.
+        # For when newman is not installed, the collections are mid-edit, or the
+        # question is about the platform rather than about the suite.
+        "enabled": True,
+        # newman, in order: this path, then PATH, then <install_dir>/node_modules.
+        "newman_bin": None,
+        # npm install newman into install_dir when it is not found anywhere.
+        "auto_install": True,
+        # Defaults to the directory the entry point runs from (complete-test/).
+        "install_dir": None,
+        # Write the newman report: one HTML file covering every folder the run
+        # handed to newman, in run order, rewritten in place each time. newman
+        # itself writes one report per process and a phase is a process, so the
+        # combined one is built here from the JSON each phase exports.
+        "html_report": True,
+        # Its filename, beside the run report named by run.report_file.
+        "report_file": "newman-report.html",
+        # Also write one report per server, alongside the combined one.
+        #
+        # A run covers several servers at once, and "did the gateway pass" is a
+        # question the combined report can only answer by scrolling. Each phase
+        # names the server it exercises with a `server` key — a string, or a
+        # list when one folder serves more than one, as the data plane's token
+        # folder does — and every distinct name gets a file of its own,
+        # `newman-report-<server>.html`, holding exactly that server's folders
+        # with their own totals. The combined report links to each.
+        #
+        # The names are free text and are not checked against
+        # `resource_servers`: two folders that should be read together are
+        # merged by giving them the same name, and split by giving them
+        # different ones. A phase with no `server` appears only in the combined
+        # report.
+        "server_reports": True,
+        # Whether it carries request and response bodies. They are where the
+        # bearer tokens, the client secrets and the passwords are, so the
+        # default is a report that shows which assertion failed and why but
+        # cannot leak a credential. Turn it on while debugging, and treat the
+        # output as secret — it is written owner-only when this is set.
+        "html_report_bodies": False,
+        # Also write newman's own HTML report — one file per phase, because a
+        # phase is one newman process. It is the report that shows each request
+        # with its headers, its body and the answer beside them, which is what a
+        # walkthrough or a hand-over is read from; the combined report above
+        # stays the place the run's sequence and its verdicts live, and links to
+        # each of these.
+        #
+        # Needs the reporter installed beside newman:
+        #     npm install --prefix complete-test newman-reporter-htmlextra
+        # A run says so and carries on without them when it is missing.
+        "newman_html_report": False,
+        # Where they go. Defaults to <run.report_dir>/newman-html.
+        "newman_html_dir": None,
+        # Headers kept out of them. Every request in these collections carries a
+        # bearer token in Authorization, so a report showing headers in full
+        # could not be handed to anybody.
+        "newman_html_skip_headers": ["Authorization"],
+        # Requests whose request *and* response bodies are left out, by name —
+        # substring-matched, comma-joined for the reporter. A sign-in posts a
+        # password and answers with a token, so no header filter helps there. A
+        # phase may add to this list with its own `hide_bodies`.
+        "newman_html_hide_bodies": [],
+        # Where the generated collections, environments and newman reports go.
+        # Defaults to <run.report_dir>/newman.
+        "work_dir": None,
+        # Keep the generated collection and environment after the run. They hold
+        # this run's tokens, so they are written with owner-only permissions.
+        "keep_work_dir": True,
+        # How long one request may take before newman gives up on it. A phase
+        # may override it with its own `request_timeout_ms`, which is what to
+        # reach for when a folder holds several requests against an endpoint
+        # that accepts the call and never answers: at 60s each that is minutes
+        # of silence every run to learn what the first one already said.
+        "request_timeout_ms": 60000,
+        # Pause between requests. Raise it on a deployment that rate-limits.
+        "delay_request_ms": 0,
+        # Skip TLS verification — for a deployment with a self-signed certificate.
+        "insecure": False,
+        # Stop a phase at its first failing request instead of running it out.
+        "bail": False,
+        # Whether a failed Postman assertion fails the run. Turn it off while a
+        # deployment has known defects the collection already asserts against;
+        # the failures are still counted and reported either way.
+        "fail_on_assertion_failure": True,
+        # Whether a request that never reached a server fails the run. Separate
+        # from the setting above, and on by default even when that one is off,
+        # because the two mean opposite things: a failed assertion is a finding
+        # about the platform, while a request that never went out is a defect in
+        # the collection — a malformed URL, a variable nobody set. Its tests did
+        # not fail, they did not run, which is the one outcome a suite must never
+        # report as green.
+        "fail_on_broken_request": True,
+        # Whether a request that went out and was never answered fails the run.
+        # Separate from the setting above because it is a different finding
+        # addressed to a different person: that one is a URL somebody has to fix
+        # in Postman, this one is an endpoint that hangs or refuses. Both mean
+        # the endpoint is untested rather than passing, so both default to on;
+        # turn this off while a deployment has a known-slow endpoint and you
+        # still want the rest of the run to go green.
+        "fail_on_unanswered_request": True,
+        # Hold back the requests that delete what the run created, so the
+        # artefacts are still there to look at in the UI and in the database
+        # when the run ends.
+        #
+        # This is not the same switch as run.cleanup. That one governs teardown,
+        # which happens after the flow; this one governs the deletes a CRUD
+        # folder does *during* it — folder 08 removes the catalogue item it
+        # created, folder 12 its subscription, folder 01 its resource server.
+        # Without this, a run can finish having left nothing to inspect even
+        # with teardown off, and there is no way to check the backend against
+        # what the collection said it did.
+        #
+        # Teardown is unaffected: its whole purpose is to delete, so the switch
+        # does not reach it. To keep everything, turn run.cleanup off as well.
+        #
+        # Negative-path deletes still run. A request whose name says it expects
+        # a client error — "Delete 404", "Delete 401" — is refused or addresses
+        # an id that never existed, so it removes nothing and is worth keeping.
+        "skip_delete_requests": False,
+        # Requests that destroy something without being a DELETE. Matched on the
+        # request name, and only consulted when skip_delete_requests is on.
+        "destructive_requests": ["*Deactivate*", "*Revoke*"],
+        # Start the generated environment from the collection's own environment
+        # file, so variables this harness knows nothing about keep their values.
+        # Everything it does know — hosts, personas, tokens, ids — is overwritten.
+        "seed_from_environment_file": True,
+        # Run the collections **as they were handed over**, on their own
+        # environment file, against the deployment's own data.
+        #
+        # Two different questions, and the default run only asks one of them.
+        # Normally every collection is pointed at artefacts this run created —
+        # its own accounts, its own item, its own window — which answers "does
+        # the chain work end to end". This answers the other one: "does the
+        # collection pass on its own terms", the thing somebody sees when they
+        # press Run in Postman, reproduced in CI and reported the same way.
+        #
+        # Turning it on changes five things together, because half of it would
+        # produce a collection that is neither:
+        #   - the shipped environment's ids, tokens and passwords are kept
+        #     rather than dropped, and they **win** over this run's values;
+        #   - no collection-variable sanitising, no request-auth re-pointing;
+        #   - no `rewrite`, no `variables` pinning, no body namespacing;
+        #   - script phases are skipped — nothing is pointed at what they build;
+        #   - there is no teardown, because this run created nothing.
+        #
+        # It is a read of somebody else's data. `as_shipped_skip_deletes` is why
+        # that is safe by default.
+        "as_shipped": False,
+        # Hold back the collections' delete/revoke/deactivate requests while
+        # as-shipped. On by default: every id in scope belongs to the deployment,
+        # and `DELETE /auth/app/{{app_id}}` against a shipped `app_id` removes a
+        # real application. Turn it off only to reproduce a Postman run exactly,
+        # knowing it will delete the rows the shipped file names.
+        "as_shipped_skip_deletes": True,
+        # Rewrite the literal `name` in request bodies to carry the run
+        # namespace, so artefacts a collection creates under a fixed name are
+        # still swept by prefix afterwards. Bodies a pre-request script builds
+        # at run time cannot be reached this way and are torn down by the ids
+        # captured from the exported environment instead.
+        # One run at a time per work directory. Every phase hands newman the
+        # same `environment.json`, rewritten before each one, so two runs
+        # sharing a directory overwrite each other's variables mid-flight — and
+        # the symptom is a phase failing on the *other* run's values, not an
+        # error. Set this true only to take over a lock deliberately.
+        "ignore_run_lock": False,
+        "namespace_names": True,
+        "namespace_fields": ["name"],
+        # A phase may point one persona at a different account for its own
+        # length, with {"personas": {"consumer": "consumer3"}}. Used for folders
+        # that change the account they test against, so they cannot break the
+        # one the end-to-end chain and the audit assertions depend on.
+        #
+        # Postman environment variables holding ids worth remembering after a
+        # phase: catalogue items and organisations are swept by teardown, and
+        # every captured variable is listed in the report.
+        "capture_items": [
+            "item_id", "databank_item_id", "aimodel_item_id", "apps_item_id",
+        ],
+        "capture_orgs": ["org_id", "organizationId"],
+        # The collections under test. More servers land here as their
+        # collections arrive; a phase names one by its key, and a phase naming a
+        # collection that is off is skipped rather than failed — so the phase
+        # list can be written ahead of the collections that fill it.
+        #
+        # `variables` is what one collection means by a name, for its own
+        # phases only. Two collections can use the same name for different
+        # things and both be right: `base_url` is the control plane's API base
+        # in one and the data plane on the same deployment in the other. A value
+        # may reference another variable — "{{item_id}}" — and is resolved
+        # against everything the run knows when the phase starts, which is how a
+        # collection's shipped placeholder gets pointed at an id this run
+        # produced without the collection being edited.
+        # `own_variables` is the mirror image of `variables`: names the harness
+        # must *not* seed, because the collection's own scripts produce them.
+        # Postman resolves the environment before the collection, so a value
+        # seeded here shadows what a pre-request script just stored — and a
+        # folder that then compares a response against what its own script
+        # stored fails on a mismatch nobody caused. A self-driven collection,
+        # one that signs in and builds its own organisation and item, needs the
+        # run's accounts and hosts and nothing else.
+        "collections": {
+            "controlplane": {
+                "enabled": True,
+                "collection": None,
+                "environment": None,
+            },
+            # The cut-down onboarding collection: sign in, onboard an
+            # organisation, publish an item, request and grant access, read the
+            # audit trail, tear it all down. Off by default and enabled by the
+            # config that names the file. It drives its own chain end to end, so
+            # its phase names no folder — it runs in one newman process, the way
+            # pressing Run in Postman does — and it owns the names its scripts
+            # write; see the temporary/ config that uses it.
+            "controlplane_kt": {
+                "enabled": False,
+                "collection": None,
+                "environment": None,
+            },
+            # NGSI-LD and gateway, read side. Off by default: it is enabled by
+            # the config that also names the file, so a deployment without the
+            # collection skips its folders and says so.
+            "dataplane": {
+                "enabled": False,
+                "collection": None,
+                "environment": None,
+                "variables": {
+                    # Its own host. The collection is written against
+                    # `<host>/dataplane`, which is not the control plane base
+                    # the other collection means by the same name.
+                    "base_url": "{{ngsild_host}}/dataplane",
+                    "basePath": "ngsi-ld/v2",
+                    # It builds its own scheme and its own `/auth` around a bare
+                    # host, where the control plane's collection wants the full
+                    # base. Both are published; each takes the one it reads.
+                    "keycloak-url": "{{kc_netloc}}",
+                    "basePathV1": "ngsi-ld/v1",
+                    # Its token folder never stores what it registers, so the
+                    # client the control plane's folder 14 registered is used.
+                    "clientID": "{{created_client_id}}",
+                    "clientSecret": "{{created_client_secret}}",
+                    # The collection ships resource ids from the deployment it
+                    # was written on. Pointed at this run's own items, so its
+                    # positive cases read data this run put there. From the
+                    # phase 2 export these are variables rather than ids typed
+                    # into the URLs, so pinning reaches them and the `rewrite`
+                    # block no longer has to.
+                    "sampleResourceId": "{{item_id}}",
+                    "entitiesResourceId": "{{item_id}}",
+                    "temporalResourceId": "{{item_id}}",
+                    "gatewayResourceId": "{{gateway_item_id}}",
+                    # The negative cases' subjects, which have to stay
+                    # predefined: a 404 needs an id that exists nowhere, a 400
+                    # one that is not a uuid at all, and a 403 a real resource
+                    # this run's consumer was never granted. Configurable, so a
+                    # deployment with a different restricted resource names it
+                    # here rather than in the collection.
+                    "nonExistentResourceId": "00000000-0000-0000-0000-000000000000",
+                    "gatewayNonExistentResourceId": "00000000-0000-0000-0000-000000000000",
+                    "invalidFormatResourceId": "invalid-id-format-123",
+                    # The app-id folder's Basic auth pair, which the phase 2
+                    # collection reads from variables instead of carrying as
+                    # literals.
+                    "appidusername": "{{app_id}}",
+                    "appidusernamepass": "{{app_secret}}",
+                },
+                # Subjects the collection writes into a URL, a body or a script,
+                # where no variable can reach them. Each is one literal to one
+                # replacement, applied to the working copy only — see
+                # retarget_collection for why this is literal and never a
+                # pattern. Filled in by the config that names the collection
+                # file, because the ids belong to that export of it.
+                "rewrite": {},
+            },
+        },
+        # The collection a phase runs against when it names none. Every folder
+        # of the control plane's collection is a phase, so naming it on each of
+        # them would be noise; a phase belonging to any other collection names
+        # it, and reads as the exception it is.
+        "default_collection": "controlplane",
+        # Written into the generated environment verbatim, last, so a deployment
+        # can add or override any variable without touching the code.
+        "extra_variables": {},
+        # The run. `postman` entries hand a folder to newman; `script` entries
+        # run one of this harness's own steps, for the work no collection can do
+        # — creating Keycloak users, publishing to RabbitMQ, uploading to S3.
+        # Reorder, disable, or add entries freely: this list *is* the flow.
+        "phases": [
+            {"name": "00 users", "type": "script", "step": "create_users"},
+            {"name": "00 auth & token", "type": "postman", "server": "controlplane", "folder": "00"},
+            {"name": "01 resource servers", "type": "postman", "server": "controlplane", "folder": "01"},
+            {"name": "02 organisation", "type": "postman", "server": "controlplane", "folder": "02"},
+            {"name": "02 org roles", "type": "script", "step": "await_org_roles"},
+            # These two rewrite the account they are pointed at — folder 03
+            # changes a password and a profile, folder 04 revokes a KYC — so
+            # each is pointed at a consumer whose job is to absorb that. The
+            # chain consumer keeps its credentials and its audit trail.
+            {
+                "name": "03 user & role", "type": "postman", "server": "controlplane", "folder": "03",
+                "personas": {"consumer": "consumer3"},
+            },
+            {
+                "name": "04 kyc", "type": "postman", "server": "controlplane", "folder": "04",
+                "personas": {"consumer": "consumer2"}, "required": False,
+            },
+            {"name": "05 credit", "type": "postman", "server": "controlplane", "folder": "05", "required": False},
+            {"name": "06 compute", "type": "postman", "server": "controlplane", "folder": "06", "required": False},
+            {"name": "07 delegation", "type": "postman", "server": "controlplane", "folder": "07", "required": False},
+            {"name": "08 catalogue crud", "type": "postman", "server": "controlplane", "folder": "08"},
+            {"name": "08 item", "type": "script", "step": "create_item"},
+            # Access first, then everything a consumer does with the item. The
+            # item is RESTRICTED, so until a policy exists every consumer-side
+            # call against it is answered "Access denied for restricted item" —
+            # subscriptions, asset requests and interactions all 403, and the
+            # failure looks like a broken endpoint rather than a missing grant.
+            {"name": "19 acl apd", "type": "postman", "server": "controlplane", "folder": "19"},
+            {"name": "19 policy", "type": "script", "step": "ensure_policy"},
+            {"name": "09 discovery", "type": "postman", "server": "controlplane", "folder": "09"},
+            {"name": "10 organisation assets", "type": "postman", "server": "controlplane", "folder": "10", "required": False},
+            {"name": "11 asset requests", "type": "postman", "server": "controlplane", "folder": "11", "required": False},
+            {"name": "12 subscriptions", "type": "postman", "server": "controlplane", "folder": "12", "required": False},
+            {"name": "13 app management", "type": "postman", "server": "controlplane", "folder": "13", "required": False},
+            {"name": "14 client management", "type": "postman", "server": "controlplane", "folder": "14"},
+            {"name": "15 leaderboard", "type": "postman", "server": "controlplane", "folder": "15", "required": False},
+            {"name": "16 interactions & feedback", "type": "postman", "server": "controlplane", "folder": "16", "required": False},
+            {"name": "20 data onboarding", "type": "script", "step": "data_onboarding"},
+            {"name": "21 resource servers", "type": "script", "step": "resource_servers"},
+            # The data plane, once there is an item with data behind it and a
+            # policy granting the consumer access to it. Every folder of the
+            # collection runs; none of them is required, because the collection
+            # asserts the spec against a deployment whose defects it documents
+            # in its own test names.
+            {"name": "23 data plane token", "type": "postman", "server": ["ngsild", "gateway"], "collection": "dataplane",
+             "folder": "Token", "required": False},
+            {"name": "24 ngsi-ld temporal & entities", "type": "postman", "server": "ngsild", "collection": "dataplane",
+             "folder": "NGSILD", "required": False},
+            {"name": "25 ngsi-ld latest data", "type": "postman", "server": "ngsild", "collection": "dataplane",
+             "folder": "Latest Data", "required": False},
+            {"name": "26 ngsi-ld search", "type": "postman", "server": "ngsild", "collection": "dataplane",
+             "folder": "Search Data", "required": False},
+            {"name": "27 ngsi-ld download", "type": "postman", "server": "ngsild", "collection": "dataplane",
+             "folder": "Download Data", "required": False},
+            {"name": "28 ngsi-ld app id auth", "type": "postman", "server": "ngsild", "collection": "dataplane",
+             "folder": "Using Appid", "required": False},
+            # The gateway item is a lane of its own when both servers are
+            # enabled, so these two point the shared id variable at it.
+            # Each gateway folder runs twice, against two different subjects.
+            #
+            # First against the reference item the collection was written
+            # against — a resource that already exists on the deployment, with
+            # the attributes its `q=` filter names. That answers "does this
+            # endpoint work". Skipped when no reference item is configured.
+            {"name": "29 gateway entities search (reference item)", "type": "postman", "server": "gateway",
+             "collection": "dataplane", "folder": "EntitiesSearch", "required": False,
+             "when": "config:resource_servers.gateway.reference_item_id",
+             "variables": {"gatewayResourceId": "{{gateway_reference_id}}"}},
+            {"name": "30 gateway complex search (reference item)", "type": "postman", "server": "gateway",
+             "collection": "dataplane", "folder": "Complex Search", "required": False,
+             "when": "config:resource_servers.gateway.reference_item_id",
+             "variables": {"gatewayResourceId": "{{gateway_reference_id}}"}},
+            # Then against the item this run created, which answers the question
+            # the harness exists for. `adaptor` starts the gateway adaptor for
+            # the phase's own length: a gateway item is answered by something
+            # consuming its queue, not out of storage, so with nothing running
+            # the request is never replied to and the read times out.
+            {"name": "31 gateway entities search (this run's item)", "type": "postman", "server": "gateway",
+             "collection": "dataplane", "folder": "EntitiesSearch", "required": False,
+             "adaptor": "gateway",
+             "variables": {"gatewayResourceId": "{{gateway_item_id}}"}},
+            {"name": "32 gateway complex search (this run's item)", "type": "postman", "server": "gateway",
+             "collection": "dataplane", "folder": "Complex Search", "required": False,
+             "adaptor": "gateway",
+             "variables": {"gatewayResourceId": "{{gateway_item_id}}"}},
+            {"name": "17 auditing", "type": "postman", "server": "controlplane", "folder": "17", "required": False},
+            {"name": "22 audit trail", "type": "script", "step": "auditing"},
+            {"name": "18 dashboard", "type": "postman", "server": "controlplane", "folder": "18", "required": False},
+        ],
+        # Teardown, in order. A collection that can delete what it created is
+        # asked to; everything else — Keycloak, RabbitMQ, S3, Postgres, and the
+        # items a collection has no delete for — falls to the scripts.
+        "teardown": [
+            # The broker, S3 and OGC objects go first, while the catalogue item
+            # still exists — they are named after it, and the servers holding
+            # them refuse to talk about a databank that is already gone.
+            {"name": "data plane", "type": "script", "step": "data_plane_cleanup"},
+            # Then the collection's own deletes, in the order the
+            # platform requires: an item with an active policy on it cannot be
+            # deleted (409), so the policy is deactivated before the item. The
+            # script step afterwards is the fallback — it covers the second
+            # lane's item, which the environment has no variable for, and
+            # anything these could not remove.
+            {
+                "name": "deactivate policy", "when": "policy_id",
+                "type": "postman", "server": "controlplane", "folder": "19",
+                "requests": ["*Deactivate*"], "required": False,
+            },
+            {
+                "name": "delete catalogue item", "when": "item_id",
+                "type": "postman", "server": "controlplane", "folder": "08",
+                "requests": ["*Delete Item*"], "required": False,
+            },
+            {
+                "name": "revoke delegation", "when": "delegation_id",
+                "type": "postman", "server": "controlplane", "folder": "07",
+                "requests": ["*Revoke*"], "required": False,
+            },
+            {
+                "name": "delete subscription", "when": "subscription_id",
+                "type": "postman", "server": "controlplane", "folder": "12",
+                "requests": ["*Delete*"], "required": False,
+            },
+            {
+                "name": "delete app", "when": "app_id",
+                "type": "postman", "server": "controlplane", "folder": "13",
+                "requests": ["*Delete App 200*"], "required": False,
+            },
+            {
+                "name": "delete feedback", "when": ["user_feedback_id", "provider_feedback_id"],
+                "type": "postman", "server": "controlplane", "folder": "16",
+                "requests": ["*Delete*Feedback*"], "required": False,
+            },
+            {
+                "name": "delete credit request", "when": "credit_request_id",
+                "type": "postman", "server": "controlplane", "folder": "05",
+                "requests": ["*Delete Credit Request*"], "required": False,
+            },
+            {
+                "name": "delete compute request", "when": "compute_request_id",
+                "type": "postman", "server": "controlplane", "folder": "06",
+                "requests": ["*Delete Request 200*"], "required": False,
+            },
+            {
+                "name": "delete asset request", "when": "asset_request_id",
+                "type": "postman", "server": "controlplane", "folder": "11",
+                "requests": ["*Delete*"], "required": False,
+            },
+            {
+                "name": "delete resource server", "when": "rs_id",
+                "type": "postman", "server": "controlplane", "folder": "01",
+                "requests": ["*Delete 204*"], "required": False,
+            },
+            {"name": "scripts", "type": "script", "step": "cleanup"},
+        ],
     },
 }
 
@@ -987,7 +1524,9 @@ def _validate(config):
                     f"gateway_adaptor.{key} is required when gateway_adaptor.enabled "
                     f"is true (or set ngsild_publish.{key} / databroker.{key})"
                 )
-        for key in ("port", "vhost", "api_url", "results_key"):
+        # `api_url` is not here: blank is a valid setting and means "answer
+        # from the adaptor's built-in records".
+        for key in ("port", "vhost", "results_key"):
             if not adaptor.get(key):
                 problems.append(
                     f"gateway_adaptor.{key} is required when gateway_adaptor.enabled is true"
@@ -1226,6 +1765,49 @@ def _validate(config):
             "widens the cos_admin sweep, it does not enable one"
         )
 
+    # The postman section is only read by the complete-test harness, so an
+    # ordinary run must not be failed by it. Everything here is checked only
+    # once a collection has actually been enabled.
+    postman = config.get("postman") or {}
+    for key, entry in (postman.get("collections") or {}).items():
+        if not isinstance(entry, dict) or not entry.get("enabled"):
+            continue
+        found = resolve_path(entry.get("collection"))
+        if not found or not found.is_file():
+            problems.append(
+                f"postman.collections.{key}.collection does not exist: "
+                f"{entry.get('collection')}"
+            )
+        if entry.get("environment"):
+            found = resolve_path(entry["environment"])
+            if not found or not found.is_file():
+                problems.append(
+                    f"postman.collections.{key}.environment does not exist: "
+                    f"{entry['environment']}"
+                )
+    known_types = ("postman", "script")
+    for index, phase in enumerate(list(postman.get("phases") or []) + list(postman.get("teardown") or [])):
+        if not isinstance(phase, dict) or phase.get("type") not in known_types:
+            problems.append(
+                f"postman phase {index} must be an object with type "
+                f"{' or '.join(known_types)}: {phase!r}"
+            )
+            continue
+        if phase["type"] == "postman" and not phase.get("folder") and not phase.get("collection") \
+                and not postman.get("default_collection"):
+            # A phase may omit the folder and run the whole collection in one
+            # newman process — which a collection whose chain runs between its
+            # folders has to do, since each phase is a process of its own and
+            # only uuid-valued collection variables survive one ending. What it
+            # cannot omit is *which* collection: with no folder there is nothing
+            # left to say what it runs.
+            problems.append(
+                f"postman phase {phase.get('name', index)!r} names neither a folder "
+                f"nor a collection, and there is no postman.default_collection"
+            )
+        if phase["type"] == "script" and not phase.get("step"):
+            problems.append(f"postman phase {phase.get('name', index)!r} needs a step")
+
     if problems:
         raise ConfigError("invalid configuration:\n  - " + "\n  - ".join(problems))
 
@@ -1256,6 +1838,39 @@ def _resolve_config_path(config_file=None):
     )
 
 
+def _apply_extends(path, raw, seen=None):
+    """A config that says `"extends": "<file>"` is read as a diff of that file.
+
+    One deployment, one set of credentials: a second config that had to repeat
+    the hosts and the passwords to change a handful of Postman phases would
+    drift from the first the day either changed, and would put a second copy of
+    the credentials on disk. So a variant config carries only what it varies —
+    a different collection, a shorter phase list — and names the config it
+    varies from, resolved relative to itself.
+
+    Dicts merge key by key and lists replace wholesale, which is what a phase
+    list wants: a variant that lists three phases runs three, not those three
+    appended to the twenty it inherited.
+    """
+    parent = raw.pop("extends", None)
+    if not parent:
+        return raw
+    seen = seen or [path.resolve()]
+    candidate = Path(parent).expanduser()
+    if not candidate.is_absolute():
+        candidate = path.parent / candidate
+    if not candidate.is_file():
+        raise ConfigError(f"{path} extends {parent}, which does not exist ({candidate})")
+    if candidate.resolve() in seen:
+        raise ConfigError(f"{path} extends itself, through {candidate}")
+    try:
+        base = json.loads(candidate.read_text())
+    except json.JSONDecodeError as err:
+        raise ConfigError(f"{candidate} is not valid JSON: {err}") from err
+    base = _apply_extends(candidate, base, seen + [candidate.resolve()])
+    return _deep_merge(base, raw)
+
+
 def load(config_file=None, overrides=None):
     """Build the effective config for a run.
 
@@ -1269,6 +1884,7 @@ def load(config_file=None, overrides=None):
     except json.JSONDecodeError as err:
         raise ConfigError(f"{path} is not valid JSON: {err}") from err
 
+    raw = _apply_extends(path, raw)
     config = _deep_merge(DEFAULTS, raw)
     config = _walk(config, _interpolate)
     config = _apply_env(config)

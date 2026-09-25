@@ -1,0 +1,57 @@
+{
+  "target": {
+    "prefix": "e2e-",
+    "item_ids": [],
+    "user_ids": []
+  },
+  "keycloak": {
+    "enabled": true,
+    "url": "https://<keycloak-host>/auth",
+    "realm": "<realm>",
+    "admin_client_id": "<admin-client-id>",
+    "admin_client_secret": "${KC_ADMIN_SECRET:-}",
+    "timeout_seconds": 30,
+    "verify_tls": true
+  },
+  "postgres": {
+    "enabled": true,
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "<database>",
+    "schema": "aaa",
+    "user": "<db-user>",
+    "password": "${PG_PASS:-}",
+    "sslmode": "prefer"
+  },
+  "rabbitmq": {
+    "enabled": false,
+    "mgmt_url": "https://<rabbitmq-management-host>",
+    "username": "<broker-admin>",
+    "password": "${RMQ_PASS:-}",
+    "vhost": "<vhost>",
+    "verify_tls": true,
+    "timeout_seconds": 20
+  },
+  "kibana": {
+    "enabled": false,
+    "host": "https://<kibana-host>",
+    "username": "<kibana-username>",
+    "password": "${KIBANA_PASS:-}",
+    "index_prefix": "iudx-v2__",
+    "timeout_seconds": 60,
+    "verify_tls": true
+  },
+  "ogc": {
+    "enabled": false,
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "ogc_rs_v2",
+    "schema": "",
+    "user": "<db-user>",
+    "password": "${OGC_PG_PASS:-}",
+    "sslmode": "prefer"
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}

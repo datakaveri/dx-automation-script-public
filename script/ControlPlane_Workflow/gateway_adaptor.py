@@ -56,6 +56,11 @@ def settings(config):
         "check_hostname": bool(adaptor["check_hostname"]),
         "api_url": adaptor["api_url"],
         "results_key": adaptor["results_key"],
+        # Absolute, like cert_path: the adaptor resolves it against its cwd,
+        # which is the temporary directory rather than the checkout.
+        "data_file": (
+            str(resolve_path(adaptor["data_file"])) if adaptor.get("data_file") else ""
+        ),
     }
 
 
@@ -75,7 +80,14 @@ def _write_config(directory, values, queue):
         },
         # The queue the catalogue created for the item, named with the item id.
         "queue": {"name": queue},
-        "api": {"url": values["api_url"], "results_key": values["results_key"]},
+        # Both may be blank, and that is meaningful: with no dataset and no
+        # upstream the adaptor answers from its own SAMPLE_RECORDS. ini_text
+        # would choke on None, so they are written blank.
+        "api": {
+            "url": values["api_url"] or "",
+            "results_key": values["results_key"],
+            "data_file": values["data_file"] or "",
+        },
     }
     return script_runner.write_file(
         directory, "config.ini", script_runner.ini_text(sections)

@@ -21,9 +21,15 @@ __pycache__/
 .venv/
 venv/
 
-# Handoff records written by script/user_creation/<role>/creation and
-# script/challenge/{creation,submission,evaluation} and consumed by the
-# matching deletion / cleanup script. The user ones name a real account and,
-# unless the config says otherwise, carry its password.
+# newman, installed beside the complete-test harness rather than globally.
+node_modules/
+
+# Generated reports. The newman work directory beneath them holds this run's
+# collection, environment and exported variables — which means live tokens.
+complete-test/reports/
+main/reports/
+
+# Handoff records written by script/user_creation/<role>/creation and consumed
+# by the matching deletion script. They name a real account and, unless the
+# config says otherwise, carry its password.
 *_created.json
-*_evaluated.json
