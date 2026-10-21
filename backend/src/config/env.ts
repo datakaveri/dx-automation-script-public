@@ -24,7 +24,7 @@ const envSchema = z
     MAIL_FROM: optionalTrimmedString,
     QA_RECIPIENTS: z.string().default(""),
     PUBLIC_API_URL: z.string().url().default("http://localhost:4000"),
-    DASHBOARD_URL: z.string().url().default("https://iudxqa-dev.slicearrow.com"),
+    DASHBOARD_URL: z.string().url().default("http://localhost:8080"),
     AUTO_RERUN_ON_STARTUP: z.stringbool().default(false),
     KEYCLOAK_URL: optionalTrimmedString,
     KEYCLOAK_REALM: optionalTrimmedString,

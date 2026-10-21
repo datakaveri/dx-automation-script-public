@@ -22,7 +22,7 @@ const API_BASE_URL = (
     ? envApiUrl
     : import.meta.env.DEV
       ? "http://localhost:4000"
-      : "https://iudxqa-backend.slicearrow.com"
+      : ""
 ).replace(/\/$/, "");
 
 export function apiUrl(path: string): string {

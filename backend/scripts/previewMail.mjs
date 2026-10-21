@@ -20,7 +20,7 @@ for (const failed of [false, true]) {
   const report = { startedAt, completedAt, data: {
     kpis: { totalCollections: 3, passedCollections: failed ? 2 : 3, failedCollections: failed ? 1 : 0, totalApis: 120, failedAssertions: failed ? 2 : 0 }, collections,
   } };
-  const html = buildRunReportHtml(report, "http://localhost:4000", "https://iudxqa-dev.slicearrow.com");
+  const html = buildRunReportHtml(report, "http://localhost:4000", process.env.DASHBOARD_URL || "http://localhost:8080");
   assert.ok(html.includes("Hi Team,"));
   assert.ok(html.includes("Daily API Health Report"));
   assert.ok(html.includes("Execution Details"));

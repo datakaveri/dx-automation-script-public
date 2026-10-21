@@ -18,10 +18,8 @@ export function createApp(controller: CollectionController, logger: winston.Logg
   app.use((request, response, next) => {
     const origin = request.header("origin");
     if (origin) {
-      if (allowedOrigins.has(origin) || allowedOrigins.has("*") || origin.includes("slicearrow.com")) {
+      if (allowedOrigins.has(origin) || allowedOrigins.has("*")) {
         response.setHeader("Access-Control-Allow-Origin", origin);
-      } else {
-        response.setHeader("Access-Control-Allow-Origin", "*");
       }
     } else {
       response.setHeader("Access-Control-Allow-Origin", "*");
