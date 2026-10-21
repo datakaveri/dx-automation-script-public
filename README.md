@@ -12,7 +12,7 @@ flowchart TD
     RevProxy -->|Proxy: 8080 or 80| Frontend[Frontend: Nginx Container]
     Frontend -->|Serve Static Files| Dashboard[SPA React Dashboard]
     Frontend -->|Reverse Proxy /api/ & /health| Backend[Backend: Node 22 API]
-    Backend -->|Sequelize: 5432| Postgres[(PostgreSQL 16 Container)]
+    Backend -->|Sequelize: 5432| Postgres[(Existing PostgreSQL Database)]
     Backend -->|Token Validation: 443| Keycloak[Keycloak Identity Provider]
     Backend -->|Reports: 587| SMTP[SMTP Server / Mail Provider]
 ```
@@ -43,7 +43,7 @@ flowchart TD
 
 ## 2. Quickstart with Docker Compose (Recommended)
 
-To deploy the complete stack (**Frontend**, **Backend**, and **PostgreSQL**) with a single command:
+To deploy the stack (**Frontend Dashboard** and **Backend Newman Runner**) with a single command:
 
 1. **Clone the repository and checkout the `neuman` branch:**
    ```bash
@@ -57,7 +57,7 @@ To deploy the complete stack (**Frontend**, **Backend**, and **PostgreSQL**) wit
    ```
 
 3. **Configure your `.env` file:**
-   Open `.env` in an editor (`nano .env`) and configure your database, Keycloak, and SMTP credentials. See the [Environment Configuration Reference](#3-environment-configuration-reference) below.
+   Open `.env` in an editor (`nano .env`) and set `DATABASE_URL` to point to your existing PostgreSQL database, along with your Keycloak and SMTP credentials. See the [Environment Configuration Reference](#3-environment-configuration-reference) below.
 
 4. **Build and start the containers:**
    ```bash
@@ -80,18 +80,15 @@ To deploy the complete stack (**Frontend**, **Backend**, and **PostgreSQL**) wit
 
 The application is completely configured through environment variables. **No credentials or domains are hardcoded**.
 
-### 3.1 Database Configuration
+### 3.1 Database Configuration (Existing PostgreSQL)
 ```bash
-# Credentials for the PostgreSQL container
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=YOUR_STRONG_PASSWORD_HERE
-POSTGRES_DB=iudxqa
-POSTGRES_PORT=5432
-
-# Backend connection string (points to the postgres service name inside docker network)
-DATABASE_URL=postgresql://postgres:YOUR_STRONG_PASSWORD_HERE@postgres:5432/iudxqa
+# Connection string pointing to your existing PostgreSQL database server.
+# Format: postgresql://<user>:<password>@<host>:<port>/<database>
+# Examples:
+#   - If Postgres runs directly on the host machine: postgresql://postgres:password@host.docker.internal:5432/iudxqa
+#   - If Postgres runs on an external/managed server: postgresql://postgres:password@db.example.com:5432/iudxqa
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@host.docker.internal:5432/iudxqa # gitleaks:allow
 ```
-*(If you are using an external managed PostgreSQL database like AWS RDS or Azure Flexible Server, set `DATABASE_URL` to your external database connection string and comment out or stop the local `postgres` service).*
 
 ### 3.2 Backend API Configuration
 ```bash
@@ -234,15 +231,15 @@ docker compose logs -f frontend
 ```
 
 ### 5.2 Database Backups & Restores
-Data is stored persistently in the named volume `postgres_data`.
+Since the backend connects to your existing PostgreSQL database instance, manage backups using your standard PostgreSQL tooling:
 
 - **Create a database backup:**
   ```bash
-  docker compose exec -T postgres pg_dump -U postgres iudxqa > backup_$(date +%F_%T).sql
+  pg_dump -h <host> -U postgres iudxqa > backup_$(date +%F_%T).sql
   ```
 - **Restore a database backup:**
   ```bash
-  cat backup_file.sql | docker compose exec -T postgres psql -U postgres -d iudxqa
+  psql -h <host> -U postgres -d iudxqa < backup_file.sql
   ```
 
 ### 5.3 Pulling Updates & Re-deploying
@@ -251,7 +248,7 @@ To update the deployment without downtime or data loss:
 git pull origin neuman
 docker compose up -d --build
 ```
-*(Your PostgreSQL database volume and historical Newman results are preserved).*
+*(Your persistent data volume `backend_data` storing runtime Newman logs is preserved).*
 
 ### 5.4 Stopping the Stack
 ```bash
