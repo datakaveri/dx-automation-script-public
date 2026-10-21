@@ -27,7 +27,35 @@ Centralized repository for the IUDX automated quality assurance harness. This pr
 
 ---
 
-## Quickstart
+---
+
+## Quickstart with Docker Compose (Recommended)
+
+To deploy the complete stack (Frontend, Backend, and PostgreSQL) with a single command:
+
+1. **Copy the unified environment template:**
+   ```bash
+   cp .env.example .env
+   ```
+2. **Review and update `.env`** with your Keycloak and SMTP credentials.
+3. **Start the containers:**
+   ```bash
+   docker compose up -d --build
+   ```
+4. **Access the services:**
+   - **Frontend Dashboard:** [http://localhost:8080](http://localhost:8080)
+   - **Backend API & Swagger Docs:** [http://localhost:4000/api/docs](http://localhost:4000/api/docs)
+   - **Backend Health Check:** [http://localhost:4000/health](http://localhost:4000/health)
+
+To view logs or stop the stack:
+```bash
+docker compose logs -f
+docker compose down
+```
+
+---
+
+## Local Development (Without Docker)
 
 ### 1. Backend Setup
 
@@ -42,7 +70,7 @@ cp .env.example .env
 npm run dev
 ```
 
-The backend server listens on port `4000` by default. Swagger documentation is available at `http://localhost:4000/docs`.
+The backend server listens on port `4000` by default. Swagger documentation is available at `http://localhost:4000/api/docs`.
 
 ### 2. Frontend Setup
 
@@ -64,4 +92,5 @@ The dashboard will be available at `http://localhost:5173`.
 ## Environment Configuration
 
 - Never commit real `.env` files into version control.
-- Reference `.env.example` inside `backend/` and `frontend/` respectively for required environment variables.
+- Reference `.env.example` at the root for Docker Compose, or inside `backend/` and `frontend/` respectively for standalone development.
+

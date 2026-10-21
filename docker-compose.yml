@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-iudxqa}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-iudxqa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/iudxqa}
+      NODE_ENV: ${NODE_ENV:-development}
+      DB_SYNC: ${DB_SYNC:-alter}
+      PORT: 4000
+      COLLECTIONS_DIR: /app/collections
+      RESULTS_FILE: /app/data/results.json
+      CONTROL_PLANE_PASSWORD_FILE: /app/data/control-plane-password.json
+      POST_RUN_VENV_ROOT: /opt/post-run-venvs
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:8080,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:8080,http://localhost:5173}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:8080}
+      AUTO_RERUN_ON_STARTUP: ${AUTO_RERUN_ON_STARTUP:-false}
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-https://v2.dev.iudx.io/auth}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-iudx-v2}
+      KEYCLOAK_FRONTEND_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-frontend-client}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-frontend-client}
+      KEYCLOAK_API_AUDIENCE: ${KEYCLOAK_API_AUDIENCE:-account}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      QA_RECIPIENTS: ${QA_RECIPIENTS:-}
+    volumes:
+      - backend_data:/app/data
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-https://v2.dev.iudx.io/auth}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-iudx-v2}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-frontend-client}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  postgres_data:
+  backend_data:

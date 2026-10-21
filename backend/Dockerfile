@@ -22,6 +22,7 @@ RUN python3 -m venv /opt/post-run-venvs/control-plane \
 
 # Environment defaults
 ENV NODE_ENV=production
+ENV DB_SYNC=none
 ENV PORT=4000
 ENV COLLECTIONS_DIR=/app/collections
 ENV RESULTS_FILE=/app/data/results.json
