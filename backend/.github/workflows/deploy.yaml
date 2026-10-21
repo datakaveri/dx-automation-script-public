@@ -1,0 +1,47 @@
+name: Build and Deploy IUDXQA Backend
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # SSH into server, pull code, build and redeploy
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_TARGET_DIR }}
+
+            # Pull latest code
+            git fetch origin dev
+            git reset --hard origin/dev
+
+            [ -f .env ] || touch .env
+            mkdir -p data
+
+            # Build image on server
+            docker build --label project=iudxqa -t ${{ secrets.CONTAINER_NAME }}-image .
+
+            # Redeploy
+            docker rm -f ${{ secrets.CONTAINER_NAME }} || true
+            docker run -d \
+              --name ${{ secrets.CONTAINER_NAME }} \
+              -p ${{ secrets.CONTAINER_PORT }}:${{ secrets.INTERNAL_PORT }} \
+              -v $(pwd)/data:/app/data \
+              --restart always \
+              --env-file .env \
+              ${{ secrets.CONTAINER_NAME }}-image
+
+            # Clean old iudxqa builds only
+            docker image prune -f --filter label=project=iudxqa
+            docker ps --filter name=${{ secrets.CONTAINER_NAME }}

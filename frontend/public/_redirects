@@ -1,0 +1,2 @@
+/api/* https://iudxqa-backend.slicearrow.com/api/:splat 200!
+/* /index.html 200

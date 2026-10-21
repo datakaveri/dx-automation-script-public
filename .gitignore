@@ -1,37 +1,49 @@
-# Local configuration — copy the .example file and fill in real values.
-# Never commit these: they hold credentials, tokens and machine-local paths.
-config.json
-db_config.json
-# …and the ones that do not use that exact name. These start as placeholders,
-# which is precisely why they get filled in with real credentials later.
-*_config.json
-
-# Logs written by the automation scripts
+# Logs
+logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# IDE project directories. JetBrains writes a project-local copy of files you
-# open, so this can end up holding a duplicate of a config that is ignored
-# everywhere else.
-.idea/
-.vscode/
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-
-# newman, installed beside the complete-test harness rather than globally.
+# Node / Dependencies
 node_modules/
+.pnpm-store/
 
-# Generated reports. The newman work directory beneath them holds this run's
-# collection, environment and exported variables — which means live tokens.
-complete-test/reports/
-main/reports/
+# Build artifacts
+dist/
+build/
+coverage/
+*.tsbuildinfo
 
-# Handoff records written by script/user_creation/<role>/creation and
-# script/challenge/{creation,submission,evaluation} and consumed by the
-# matching deletion / cleanup script. The user ones name a real account and,
-# unless the config says otherwise, carry its password.
-*_created.json
-*_evaluated.json
+# Environment variables & secrets (CRITICAL)
+.env
+.env.*
+.env*.local
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# Runtime & temporary files
+.post-run-venvs/
+control-plane-password.json
+data/control-plane-password.json
+*cleanup_config.json
+*deletion_config.json
+!*.example
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db

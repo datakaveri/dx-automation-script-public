@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env*
+!.env.example
+*.pem
+.post-run-venvs/
+/data/control-plane-password.json

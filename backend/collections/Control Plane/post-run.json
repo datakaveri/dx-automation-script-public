@@ -1,0 +1,32 @@
+{
+  "export": {
+    "org_create_req_id": "environment.org_create_req_id"
+  },
+  "ignoreFiles": [
+    "organisation_deletion_config.json",
+    "compute_credit_cleanup_config.json"
+  ],
+  "python": {
+    "requirements": "requirements.txt"
+  },
+  "steps": [
+    {
+      "name": "Delete created organisation",
+      "command": "python",
+      "args": [
+        "organisation_deletion.py",
+        "--request-id",
+        "{{env.org_create_req_id}}"
+      ]
+    },
+    {
+      "name": "Clean up compute data",
+      "command": "python",
+      "args": [
+        "compute_credit_cleanup.py",
+        "--password",
+        "{{env.consumer_pass}}"
+      ]
+    }
+  ]
+}
