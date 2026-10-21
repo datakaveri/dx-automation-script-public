@@ -53,6 +53,8 @@ docker compose logs -f
 docker compose down
 ```
 
+For complete production server setup, domain configuration, Let's Encrypt SSL, backups, and maintenance, refer to the **[Production Deployment Guide](DEPLOYMENT.md)**.
+
 ---
 
 ## Local Development (Without Docker)

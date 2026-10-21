@@ -25,7 +25,14 @@ const envSchema = z
     QA_RECIPIENTS: z.string().default(""),
     PUBLIC_API_URL: z.string().url().default("http://localhost:4000"),
     DASHBOARD_URL: z.string().url().default("https://iudxqa-dev.slicearrow.com"),
-    AUTO_RERUN_ON_STARTUP: z.stringbool().default(false)
+    AUTO_RERUN_ON_STARTUP: z.stringbool().default(false),
+    KEYCLOAK_URL: optionalTrimmedString,
+    KEYCLOAK_REALM: optionalTrimmedString,
+    KEYCLOAK_CLIENT_ID: optionalTrimmedString,
+    KEYCLOAK_FRONTEND_CLIENT_ID: optionalTrimmedString,
+    KEYCLOAK_API_AUDIENCE: optionalTrimmedString,
+    RESULTS_FILE: optionalTrimmedString,
+    POST_RUN_VENV_ROOT: optionalTrimmedString
   })
   .superRefine((config, context) => {
     if (config.NODE_ENV === "production" && config.DB_SYNC === "alter") {
